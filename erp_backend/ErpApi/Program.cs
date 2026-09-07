@@ -15,7 +15,10 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new NullableDecimalAsStringConverter());
     });
 
-builder.Services.AddOpenApi();
+// المحوّل أعلاه يجعل المبلغ نصاً على السلك، وهذا يجعله نصاً في العقد. الطرفان لازمان:
+// مولّد المخطط يقرأ Http.Json.JsonOptions لا Mvc.JsonOptions، فلا يرى المحوّل أصلاً
+builder.Services.AddOpenApi(options =>
+    options.AddSchemaTransformer(new DecimalAsStringSchemaTransformer()));
 
 // [ApiController] يُرجع ValidationProblemDetails بشكل مخالف لـ ApiResponse<T>، ولا يمرّ
 // بالـ Middleware لأنه ليس استثناءً. تجاوزه إلزامي ليبقى شكل الاستجابة واحداً (بند 6.3)

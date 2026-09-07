@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ErpApi\ErpApi.csproj" />
+    <!-- المرجع إلى التنفيذي مقصود: الاختبار يستدعي المنتِج نفسه الذي يستدعيه الكاتب،
+         فيكون خط الأساس والمقارَن به من مسار واحد. والكتابة تبقى حكراً على Main هناك. -->
+    <ProjectReference Include="..\ErpApi.ContractTool\ErpApi.ContractTool.csproj" />
   </ItemGroup>
 
 </Project>
