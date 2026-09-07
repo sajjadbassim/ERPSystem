@@ -1,0 +1,42 @@
+# مخرجات البناء
+bin/
+obj/
+[Bb]uild/
+[Rr]elease/
+[Dd]ebug/
+artifacts/
+publish/
+TestResults/
+*.binlog
+
+# تبعيات npm — لا مشروع واجهة بعد، والقاعدة تسبق أول ملف
+node_modules/
+
+# الأسرار — بند 18: لا سلسلة اتصال ولا مفتاح JWT في أي ملف متعقَّب.
+# أسرار المستخدم تعيش خارج المستودع أصلاً، وهذه حراسة ضد النسخ سهواً إلى الداخل
+secrets.json
+appsettings.*.local.json
+appsettings.Local.json
+*.pfx
+*.snk
+.env
+.env.*
+
+# بيئات التطوير
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+
+# نظام التشغيل
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# سجلات ومؤقتات
+*.log
+*.tmp
