@@ -1,5 +1,6 @@
 using ErpApi.Common;
 using ErpApi.Common.Json;
+using ErpApi.Common.Validation;
 using ErpApi.Extensions;
 using ErpApi.Middleware;
 using Microsoft.AspNetCore.Mvc;
@@ -7,8 +8,10 @@ using Microsoft.AspNetCore.Mvc;
 var builder = WebApplication.CreateBuilder(args);
 
 // نقطة التسجيل المركزية الوحيدة لمحوّل المبالغ (R-API-03). أي DTO يحمل decimal
-// يُحمى تلقائياً، فلا يعتمد الأمر على تذكّر كاتب الـ DTO
-builder.Services.AddControllers()
+// يُحمى تلقائياً، فلا يعتمد الأمر على تذكّر كاتب الـ DTO.
+// والفارض المسجَّل معه يكنس كل خاصية enum بالانعكاس، فتُحمى الخاصية الجديدة بحكم
+// البناء لا بحكم التذكّر — والسمة على كل خاصية كانت تفشل مفتوحة
+builder.Services.AddControllers(options => options.Filters.Add<EnumRangeValidationFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DecimalAsStringConverter());
