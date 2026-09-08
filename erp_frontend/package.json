@@ -2,11 +2,32 @@
   "name": "erp-frontend",
   "private": true,
   "type": "module",
-  "description": "عمل تحضيري لـ ROADMAP §4.4: توليد أنواع TypeScript من عقد OpenAPI (R-API-04). لا مشروع React بعد.",
+  "description": "واجهة ROADMAP §4.4: React + Vite + TypeScript، وأنواع مولَّدة آلياً من عقد OpenAPI (R-API-04).",
   "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
     "generate:api-types": "node scripts/generate-api-types.mjs"
   },
   "devDependencies": {
-    "openapi-typescript": "^7.9.1"
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/big.js": "^7.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.0.1",
+    "openapi-typescript": "^7.9.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "big.js": "^7.0.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
