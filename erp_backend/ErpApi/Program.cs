@@ -19,9 +19,14 @@ builder.Services.AddControllers(options => options.Filters.Add<EnumRangeValidati
     });
 
 // المحوّل أعلاه يجعل المبلغ نصاً على السلك، وهذا يجعله نصاً في العقد. الطرفان لازمان:
-// مولّد المخطط يقرأ Http.Json.JsonOptions لا Mvc.JsonOptions، فلا يرى المحوّل أصلاً
+// مولّد المخطط يقرأ Http.Json.JsonOptions لا Mvc.JsonOptions، فلا يرى المحوّل أصلاً.
+// والثاني نظيره على جانب الـenum: الفارض يمنع ما هو خارج المدى، وهذا يعلن المدى —
+// وعقدٌ بلا إعلان يَعِد بقبول ما يرفضه الخادم
 builder.Services.AddOpenApi(options =>
-    options.AddSchemaTransformer(new DecimalAsStringSchemaTransformer()));
+{
+    options.AddSchemaTransformer(new DecimalAsStringSchemaTransformer());
+    options.AddSchemaTransformer(new EnumRangeSchemaTransformer());
+});
 
 // [ApiController] يُرجع ValidationProblemDetails بشكل مخالف لـ ApiResponse<T>، ولا يمرّ
 // بالـ Middleware لأنه ليس استثناءً. تجاوزه إلزامي ليبقى شكل الاستجابة واحداً (بند 6.3)

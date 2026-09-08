@@ -71,6 +71,65 @@ public class ApiContractTests
             + string.Join(Environment.NewLine, offenders));
     }
 
+    // M03
+    [Fact]
+    public async Task M03_EveryEnumSchema_DeclaresItsAllowedValues()
+    {
+        var generated = await GeneratedDocumentAsync();
+
+        var schemas = generated["components"]?["schemas"] as JsonObject
+                      ?? throw new InvalidOperationException("لا components.schemas في الوثيقة المولَّدة.");
+
+        // الكنس على **كل** enum في التجميع لا على لائحة أسماء: النوع الجديد يظهر في
+        // العقد باسمه فيُشمل تلقائياً. ولائحة معروفة كانت ستفشل مفتوحة — الجديد
+        // ببساطة ليس فيها، وهو فخّ L34 نفسه على جانب العقد
+        var enumTypes = typeof(ErpApi.Core.Constants.AccountType).Assembly
+            .GetTypes()
+            .Where(t => t.IsEnum && schemas.ContainsKey(t.Name))
+            .OrderBy(t => t.Name, StringComparer.Ordinal)
+            .ToList();
+
+        // حارس ضد النجاح الفارغ: لو انقطع الربط بين اسم النوع واسم المخطط يوماً،
+        // لصار الاختبار يجتاز بلا أن يفحص شيئاً
+        Assert.True(enumTypes.Count > 0,
+            "لم يُعثر على أي نوع enum في العقد — الربط بين اسم النوع واسم المخطط منقطع، "
+            + "والاختبار كان سيجتاز بلا فحص.");
+
+        var offenders = new List<string>();
+
+        foreach (var enumType in enumTypes)
+        {
+            var expected = Enum.GetValues(enumType).Cast<object>()
+                .Select(value => Convert.ToInt64(value).ToString())
+                .ToList();
+
+            var declared = (schemas[enumType.Name]?["enum"] as JsonArray)?
+                .Select(entry => entry?.ToJsonString() ?? "null")
+                .ToList();
+
+            if (declared is null)
+            {
+                offenders.Add($"  {enumType.Name}: بلا enum — العقد يصف مدى النوع الأساسي لا مدى الـenum");
+                continue;
+            }
+
+            if (!declared.SequenceEqual(expected))
+            {
+                offenders.Add($"  {enumType.Name}: العقد يعلن [{string.Join(", ", declared)}] "
+                              + $"والنوع يقول [{string.Join(", ", expected)}]");
+            }
+        }
+
+        // ‏`{"type":"integer"}` مجرّدة تصف سطحاً **أوسع** من الحقيقي، وهو عين ما وُجد
+        // `DecimalAsStringSchemaTransformer` لأجله: لا تُترك القاعدة تحمل الحقيقة وحدها
+        // بينما العقد يكذب بالسكوت. والفارض العام يرفض ما يقبله العقد اليوم، فعقد
+        // غير مصحَّح يَعِد بقبول ما يرفضه الخادم
+        Assert.True(offenders.Count == 0,
+            $"وُجد {offenders.Count} نوع enum لا يعلن العقد مداه بدقة:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, offenders));
+    }
+
     // مقارنة مُطبَّعة لا نصّية: ترتيب المفاتيح والمسافات ونهايات الأسطر لا تُنتج فشلاً.
     // الفشل على التفاهات يُدرَّب على تجاهله، والاختبار المُتجاهَل أسوأ من غيابه.
     private static void CollectDifferences(JsonNode? committed, JsonNode? generated, string path, List<string> differences)

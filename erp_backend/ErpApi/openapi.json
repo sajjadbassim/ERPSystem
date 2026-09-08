@@ -1757,6 +1757,13 @@
         }
       },
       "AccountType": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
         "type": "integer"
       },
       "ApiResponseOfAccountResponseDto": {
@@ -2640,6 +2647,10 @@
         }
       },
       "FiscalPeriodType": {
+        "enum": [
+          1,
+          2
+        ],
         "type": "integer"
       },
       "FiscalYearCreateDto": {
@@ -2780,6 +2791,11 @@
         }
       },
       "FxRateSource": {
+        "enum": [
+          1,
+          2,
+          3
+        ],
         "type": "integer"
       },
       "JournalEntryListItemDto": {
@@ -3024,6 +3040,12 @@
         }
       },
       "JournalSourceModule": {
+        "enum": [
+          1,
+          2,
+          3,
+          4
+        ],
         "type": "integer"
       },
       "LoginRequestDto": {
@@ -3050,6 +3072,10 @@
         }
       },
       "NormalBalance": {
+        "enum": [
+          0,
+          1
+        ],
         "type": "integer"
       },
       "PagedResponseOfAccountResponseDto": {
@@ -3492,6 +3518,13 @@
         }
       },
       "SystemAccountRole": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
         "type": "integer"
       },
       "TokenPairDto": {
