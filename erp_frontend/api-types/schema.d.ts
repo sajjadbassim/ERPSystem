@@ -1354,7 +1354,8 @@ export interface components {
             systemAccountRole?: null | components["schemas"]["SystemAccountRole"];
             isActive: boolean;
         };
-        AccountType: number;
+        /** @enum {integer} */
+        AccountType: 1 | 2 | 3 | 4 | 5;
         ApiResponseOfAccountResponseDto: {
             success?: boolean;
             message?: null | string;
@@ -1556,7 +1557,8 @@ export interface components {
             endDate: string;
             isClosed: boolean;
         };
-        FiscalPeriodType: number;
+        /** @enum {integer} */
+        FiscalPeriodType: 1 | 2;
         FiscalYearCreateDto: {
             /** Format: uuid */
             companyId: string;
@@ -1602,7 +1604,8 @@ export interface components {
             rateDate: string;
             rateSource: components["schemas"]["FxRateSource"];
         };
-        FxRateSource: number;
+        /** @enum {integer} */
+        FxRateSource: 1 | 2 | 3;
         JournalEntryListItemDto: {
             /** Format: uuid */
             id: string;
@@ -1673,13 +1676,15 @@ export interface components {
             creditBase: string;
             description?: null | string;
         };
-        JournalSourceModule: number;
+        /** @enum {integer} */
+        JournalSourceModule: 1 | 2 | 3 | 4;
         LoginRequestDto: {
             userName: string;
             password: string;
             companyCode?: null | string;
         };
-        NormalBalance: number;
+        /** @enum {integer} */
+        NormalBalance: 0 | 1;
         PagedResponseOfAccountResponseDto: {
             data?: components["schemas"]["AccountResponseDto"][];
             /** Format: int32 */
@@ -1796,7 +1801,8 @@ export interface components {
             isSystemRole: boolean;
             isActive: boolean;
         };
-        SystemAccountRole: number;
+        /** @enum {integer} */
+        SystemAccountRole: 1 | 2 | 3 | 4 | 5;
         TokenPairDto: {
             accessToken: string;
             refreshToken: string;

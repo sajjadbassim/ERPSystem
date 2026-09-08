@@ -4,7 +4,7 @@
   "type": "module",
   "description": "عمل تحضيري لـ ROADMAP §4.4: توليد أنواع TypeScript من عقد OpenAPI (R-API-04). لا مشروع React بعد.",
   "scripts": {
-    "generate:api-types": "openapi-typescript ../erp_backend/ErpApi/openapi.json --output api-types/schema.d.ts"
+    "generate:api-types": "node scripts/generate-api-types.mjs"
   },
   "devDependencies": {
     "openapi-typescript": "^7.9.1"
