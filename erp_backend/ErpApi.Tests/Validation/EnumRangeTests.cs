@@ -168,6 +168,51 @@ public class EnumRangeTests(TestDatabase database) : IdentityTestBase(database)
         await AccountingClient.AssertNoRawSqlLeakAsync(response);
     }
 
+    // N07 — الحمولة D: قيمة لا تسع في النوع الأساسي أصلاً (`byte`).
+    // هذه لا يبلغها الفارض: `System.Text.Json` يرفضها في إلغاء التسلسل قبل ربط النموذج،
+    // فتخرج رسالته الإنجليزية حاملةً **اسم النوع الداخلي بمساره الكامل** — خرق بند 8.4
+    [Fact]
+    public async Task N07_CreateAccount_AccountTypeBeyondUnderlyingType_LeaksNoInternalTypeName()
+    {
+        var identity = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client, AccountingClient.AccountsPath, accessToken,
+            NewAccount(identity.Company.CompanyId, "1164", "قيمة لا تسع في byte", accountType: 300));
+
+        var message = await AuthClient.ReadFieldAsync(response, "message");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("accountType", message, StringComparison.Ordinal);
+        await AccountingClient.AssertNoInternalLeakAsync(response);
+    }
+
+    // N08 — الحمولة E: اسم العضو نصاً. مرفوض عمداً — لا `JsonStringEnumConverter` مسجَّل،
+    // والعقد يعلن أرقاماً لا أسماء. والمقصود هنا **صيغة الرفض** لا الرفض نفسه
+    [Fact]
+    public async Task N08_CreateAccount_AccountTypeAsMemberName_LeaksNoInternalTypeName()
+    {
+        var identity = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client, AccountingClient.AccountsPath, accessToken,
+            new
+            {
+                companyId = identity.Company.CompanyId,
+                code = "1165",
+                name = "نوع بالاسم لا بالرقم",
+                accountType = "Asset",
+                normalBalance = 0,
+                isPostable = true
+            });
+
+        var message = await AuthClient.ReadFieldAsync(response, "message");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("accountType", message, StringComparison.Ordinal);
+        await AccountingClient.AssertNoInternalLeakAsync(response);
+    }
+
     // N06 — النصف السالب: الفارض يمنع ما هو خارج المدى ولا يمنع ما بداخله.
     // حارسٌ يرفض كل شيء ليس حارساً بل عطباً، وقيمته في بقائه أخضر بعد بناء الفارض
     [Fact]

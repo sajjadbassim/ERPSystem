@@ -11,7 +11,15 @@ var builder = WebApplication.CreateBuilder(args);
 // يُحمى تلقائياً، فلا يعتمد الأمر على تذكّر كاتب الـ DTO.
 // والفارض المسجَّل معه يكنس كل خاصية enum بالانعكاس، فتُحمى الخاصية الجديدة بحكم
 // البناء لا بحكم التذكّر — والسمة على كل خاصية كانت تفشل مفتوحة
-builder.Services.AddControllers(options => options.Filters.Add<EnumRangeValidationFilter>())
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<EnumRangeValidationFilter>();
+
+        // بند 8.4 على مسار ربط النموذج: رسائل الرابط و [Required] الضمني كلاهما
+        // إنجليزي افتراضاً، والثاني كان يسرّب اسم معامل الفعل في C#
+        options.ModelMetadataDetailsProviders.Add(new ArabicRequiredMetadataProvider());
+        ArabicValidationMessages.Apply(options.ModelBindingMessageProvider);
+    })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DecimalAsStringConverter());
@@ -33,14 +41,10 @@ builder.Services.AddOpenApi(options =>
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
-    {
-        var message = string.Join(" | ", context.ModelState.Values
-            .SelectMany(v => v.Errors)
-            .Select(e => e.ErrorMessage));
-
-        return new BadRequestObjectResult(
-            ApiResponse<object>.Fail(message, context.HttpContext.TraceIdentifier));
-    };
+        new BadRequestObjectResult(
+            ApiResponse<object>.Fail(
+                ArabicValidationMessages.Describe(context.ModelState),
+                context.HttpContext.TraceIdentifier));
 });
 
 builder.Services.AddAppPersistence(builder.Configuration);

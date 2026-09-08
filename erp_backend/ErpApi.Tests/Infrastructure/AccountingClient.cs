@@ -99,4 +99,37 @@ public static class AccountingClient
             Assert.DoesNotContain(number.ToString(), body, StringComparison.Ordinal);
         }
     }
+
+    // آثار تدل على أن بنية داخلية عبرت إلى العميل من **طبقة ربط النموذج** لا من القاعدة:
+    // مسارات أنواع C#، ومواضع المحلّل، وأسماء تجميعات الإطار
+    private static readonly string[] InternalLeakMarkers =
+    [
+        "ErpApi.", "System.", "Microsoft.", "Path: $", "LineNumber", "BytePositionInLine"
+    ];
+
+    // **الحارس الخَلَف لمسار لا يغطيه `AssertNoRawSqlLeakAsync`** — وعدم تغطيته مقيس
+    // لا مفترض: أربع حمولات متسربة مُرِّرت على مرشِّحاته فمرّت كلها، لأن مؤشراته كلها
+    // من عالم SQL ولا واحد منها يظهر في رسالة `System.Text.Json` أو `ModelState`.
+    //
+    // والشرط الموجب هنا هو الحارس الحقيقي: **الرسالة يجب أن تحمل حرفاً عربياً**.
+    // وهي نفس القاعدة التي يفرضها `ArabicValidationMessages` في الإنتاج، فيفشل الاختبار
+    // مغلقاً على أي رسالة إنجليزية جديدة من أي مصدر — بينما لائحة عبارات معروفة كانت
+    // ستمرّرها لأنها ليست فيها
+    public static async Task AssertNoInternalLeakAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+
+        using var document = JsonDocument.Parse(body);
+        var message = document.RootElement.TryGetProperty("message", out var value)
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
+
+        Assert.True(message.Any(character => character is >= '؀' and <= 'ۿ'),
+            $"رسالة بلا حرف عربي — بند 8.4: «{message}»");
+
+        foreach (var marker in InternalLeakMarkers)
+        {
+            Assert.DoesNotContain(marker, message, StringComparison.Ordinal);
+        }
+    }
 }
