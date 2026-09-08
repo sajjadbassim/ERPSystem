@@ -34,3 +34,10 @@ export function useCurrency(currencyId: string): RegisteredCurrency | undefined 
 
   return currencies?.find((currency) => currency.id === currencyId);
 }
+
+// ‏القائمة كلها — يحتاجها مَن يعرض خيارات لا مَن يعرض مبلغاً واحداً
+const EMPTY: readonly RegisteredCurrency[] = [];
+
+export function useCurrencies(): readonly RegisteredCurrency[] {
+  return useContext(CurrencyRegistryContext) ?? EMPTY;
+}
