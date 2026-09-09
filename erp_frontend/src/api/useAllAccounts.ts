@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { components } from "../../api-types/schema";
+import { useAuth } from "../auth/AuthProvider";
+import { apiFetch } from "./http";
 import type { AccountItem } from "./useAccounts";
 
 type AccountsEnvelope = components["schemas"]["ApiResponseOfPagedResponseOfAccountResponseDto"];
@@ -29,7 +31,9 @@ async function fetchAllAccounts(): Promise<AccountItem[]> {
   for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
     // ‏`PageNumber`/`PageSize` بحرفهما الكبير كما في العقد — مقيس من معاملات
     // ‏`GET /api/accounts`، ولا يقبل الخادم غيرهما
-    const response = await fetch(`/api/accounts?PageNumber=${pageNumber}&PageSize=${PAGE_SIZE}`);
+    // ‏`apiFetch` لا `fetch`: الترويسة والتجديد يقعان في المنفذ الواحد لا هنا
+    const response = await apiFetch(
+      `/api/accounts?PageNumber=${pageNumber}&PageSize=${PAGE_SIZE}`);
 
     if (!response.ok) {
       throw new Error(`تعذّر جلب الحسابات (${response.status}).`);
@@ -50,7 +54,19 @@ async function fetchAllAccounts(): Promise<AccountItem[]> {
 }
 
 export function useAllAccounts(): UseAllAccountsResult {
-  const query = useQuery({ queryKey: ["accounts", "all"], queryFn: fetchAllAccounts });
+  // ‏لا استعلام قبل رمز صالح (`L08`). وعبر `useAuth()` لا بقراءة المخزن مباشرةً:
+  // المخزن وحدة مفردة **غير تفاعلية**، فقراءته كانت تُبقي الاستعلام معطَّلاً بعد
+  // تسجيل الدخول حتى يقع تصيير لسبب آخر. والسياق يشترك فيه المستهلك فيتفاعل.
+  //
+  // ‏⚠ و`useAccounts` (صفحة واحدة) **غير مبوَّب**: لا مستهلك له، وتبويبه إضافةُ
+  // سلوك لا يطلبه اختبار. مسجَّل ديناً مقترَحاً `L11`
+  const { status } = useAuth();
+
+  const query = useQuery({
+    queryKey: ["accounts", "all"],
+    queryFn: fetchAllAccounts,
+    enabled: status === "authenticated"
+  });
 
   return {
     status: query.status,

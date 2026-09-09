@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { AccountPicker } from "./AccountPicker";
 import type { AccountItem } from "../../api/useAccounts";
+import { AuthProvider } from "../../auth/AuthProvider";
+import { clearTokens, setTokens } from "../../auth/token-store";
 
 // ‏مصفوفة الحالات S (المنتقيات).
 //
@@ -34,8 +36,15 @@ const LABELS = ACCOUNTS.map((account) => `${account.code} — ${account.name}`);
 function createWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
+  // ‏`AuthProvider` أُضيف بعد `L08`: `useAllAccounts` صار مبوَّباً بـ
+  // ‏`enabled: status === "authenticated"`، فبلا مزوّد يبقى «غير مسجَّل» ولا يجلب.
+  // **تركيب سياق فقط — صفر تعديل على أي ادعاء في `S01`..`S09`**
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -104,8 +113,20 @@ async function openAndReadOptions(input: HTMLElement): Promise<string[]> {
   return options.map((option) => option.textContent ?? "");
 }
 
+// ‏البذر تهيئة لا ادعاء: `AuthProvider` يشتقّ حالته الابتدائية من المخزن، فرمزٌ
+// مبذور يجعله «مسجَّلاً» عند التركيب. وحذف هذا السطر يُرسب الحالات التسع — فشل
+// **مغلق ومرئي** لا صامت
+beforeEach(() => {
+  setTokens({
+    accessToken: "s-access",
+    refreshToken: "s-refresh",
+    accessTokenExpiresAt: "2026-09-09T10:00:00.0000000Z"
+  });
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  clearTokens();
 });
 
 describe("AccountPicker — S (منتقي الحساب، بمعزل عن أي نداء حيّ)", () => {
