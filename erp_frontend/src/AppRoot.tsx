@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AppThemeProvider } from "./theme/AppThemeProvider";
 import { AuthProvider } from "./auth/AuthProvider";
+import { CurrencySourceProvider } from "./currency/currency-source";
 import { queryClientConfig } from "./api/query-config";
 
 // ‏وُجد هذا المكوّن لأن `main.tsx` يستدعي `createRoot` فلا يُختبَر. فتُنقل تركيبة
@@ -26,7 +27,13 @@ export function AppRoot(props: AppRootProps) {
   return (
     <AppThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>{props.children}</AuthProvider>
+        {/* ‏والترتيب هنا مقصود كذلك: مصدر العملات **داخل** `AuthProvider` لأن بوابته
+            ‏`enabled` تقرأ حالة الجلسة (`C06`)، وهو داخل مزوّد الاستعلام لأنه يستعلم.
+            ‏وبهذا السطر يُغلق الدَّين ٢: السجل صار **موصولاً بمصدره** في التطبيق لا
+            في الاختبار وحده. يحرسه `L12` */}
+        <AuthProvider>
+          <CurrencySourceProvider>{props.children}</CurrencySourceProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </AppThemeProvider>
   );

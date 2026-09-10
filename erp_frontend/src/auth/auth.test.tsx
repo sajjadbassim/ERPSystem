@@ -9,6 +9,7 @@ import { clearTokens, getTokens, setTokens } from "./token-store";
 import { apiFetch } from "../api/http";
 import { AppRoot } from "../AppRoot";
 import { useAllAccounts } from "../api/useAllAccounts";
+import { useCurrencyLookup } from "../currency/currency-registry";
 
 // ‏مصفوفة الحالات L (المصادقة وتركيب الجذر).
 //
@@ -95,6 +96,23 @@ function RootProbe() {
 function AccountsProbe() {
   useAllAccounts();
   return null;
+}
+
+const IQD = {
+  id: "0199a1f0-0000-7000-8000-0000000000c1",
+  code: "IQD",
+  name: "دينار عراقي",
+  symbol: "د.ع",
+  decimalPlaces: 0,
+  isActive: true
+};
+
+// ‏يقرأ **عبر السجل** لا عن المزوّد مباشرةً: غياب المزوّد يُرجع «جاهز وفارغ»، فلا
+// يُميَّز عن مزوّد مركَّب فارغ. والتمييز الوحيد الصادق أن **معرّفاً حقيقياً يُحلّ**
+function CurrencyProbe() {
+  const { currency } = useCurrencyLookup(IQD.id);
+
+  return <span>{`currency:${currency?.code ?? "—"}`}</span>;
 }
 
 beforeEach(() => {
@@ -250,6 +268,30 @@ describe("L — المصادقة وتركيب الجذر", () => {
 
     // ‏الدَّين ٧ مقيساً: مزوّد الاستعلام مركَّب فعلاً، والاتجاه يبلغ الشجرة معه
     expect(screen.getByText(/^(rtl|ltr):(true|false)$/u).textContent).toBe("rtl:true");
+  });
+
+  it("L12: AppRoot يوفّر **سجل العملات** مصدوراً من الـAPI", async () => {
+    setTokens(TOKENS);
+
+    stubRoutes((call) =>
+      call.url.includes("/api/currencies")
+        ? jsonResponse({
+            success: true,
+            message: null,
+            traceId: null,
+            data: { data: [IQD], totalCount: 1, pageNumber: 1, pageSize: 100, totalPages: 1, hasNextPage: false }
+          })
+        : jsonResponse({ success: true, data: null }));
+
+    render(
+      <AppRoot>
+        <CurrencyProbe />
+      </AppRoot>);
+
+    // ‏نظير `L09` حرفياً: التركيب **يُقاس ولا يُدَّعى**. وغيابه هو ما أبقى الدَّين ٧
+    // مفتوحاً وشُخِّص خطأً في تلخيص شفهيّ — فلا يُترك السجل بلا حارس تركيب
+    await waitFor(() =>
+      expect(screen.getByText(/^currency:/u).textContent).toBe(`currency:${IQD.code}`));
   });
 
   it("L10: طلبان متزامنان يتلقيان 401 ⟵ تجديد واحد لا اثنان", async () => {

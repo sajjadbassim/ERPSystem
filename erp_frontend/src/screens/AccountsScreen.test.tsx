@@ -22,11 +22,23 @@ const SERVER_MESSAGE = "الخدمة غير متاحة مؤقتاً.";
 
 // ‏الأربعة تعكس تنوّع الأعمدة كما بُذرت حيّاً: تجميعي، وتشغيلي، وطبيعة دائنة،
 // ومعطَّل. فلو عرض عمودٌ قيمة واحدة لكل الصفوف لَسقطت حالة منها
+const IQD = {
+  id: "0199a1f0-0000-7000-8000-0000000000c1",
+  code: "IQD",
+  name: "دينار عراقي",
+  symbol: "د.ع",
+  decimalPlaces: 0,
+  isActive: true
+};
+
+// ‏`1110` وحده **مقيَّد بعملة** — كما بُذر حيّاً. والبقية `currencyId: null`، وهي
+// حالة مشروعة في العقد لا خطأ: حساب غير مقيَّد بعملة واحدة
 const ACCOUNTS = [
-  { id: "a1", companyId: "c1", code: "1200", name: "الأصول المتداولة", accountType: 1, normalBalance: 0, isPostable: false, isActive: true },
-  { id: "a2", companyId: "c1", code: "1100", name: "النقدية بالصندوق", accountType: 1, normalBalance: 0, isPostable: true, isActive: true },
-  { id: "a3", companyId: "c1", code: "4100", name: "إيرادات المبيعات", accountType: 4, normalBalance: 1, isPostable: true, isActive: true },
-  { id: "a4", companyId: "c1", code: "5100", name: "مصروف الإيجار", accountType: 5, normalBalance: 0, isPostable: true, isActive: false }
+  { id: "a1", companyId: "c1", code: "1200", name: "الأصول المتداولة", accountType: 1, normalBalance: 0, isPostable: false, isActive: true, currencyId: null },
+  { id: "a2", companyId: "c1", code: "1100", name: "النقدية بالصندوق", accountType: 1, normalBalance: 0, isPostable: true, isActive: true, currencyId: null },
+  { id: "a5", companyId: "c1", code: "1110", name: "صندوق الدينار", accountType: 1, normalBalance: 0, isPostable: true, isActive: true, currencyId: IQD.id },
+  { id: "a3", companyId: "c1", code: "4100", name: "إيرادات المبيعات", accountType: 4, normalBalance: 1, isPostable: true, isActive: true, currencyId: null },
+  { id: "a4", companyId: "c1", code: "5100", name: "مصروف الإيجار", accountType: 5, normalBalance: 0, isPostable: true, isActive: false, currencyId: null }
 ];
 
 function accountsPage(items: unknown[]) {
@@ -40,6 +52,27 @@ function accountsPage(items: unknown[]) {
       data: { data: items, totalCount: items.length, pageNumber: 1, pageSize: 100, totalPages: 1, hasNextPage: false }
     })
   };
+}
+
+function currenciesPage(items: unknown[]) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      success: true,
+      message: null,
+      traceId: null,
+      data: { data: items, totalCount: items.length, pageNumber: 1, pageSize: 100, totalPages: 1, hasNextPage: false }
+    })
+  };
+}
+
+// ‏⚠ **الموجّه صار بحسب المسار** بعد أن صار `AppRoot` يركّب مصدر العملات: ردٌّ واحد
+// لكل المسارات كان يُسلّم غلاف الحسابات إلى مستهلك العملات فيقرأ حسابات على أنها
+// عملات. تغيير في **أداة القياس** لا في أي ادعاء
+function stubBoth(accounts: unknown[] = ACCOUNTS, currencies: unknown[] = [IQD]) {
+  return vi.fn(async (input: unknown) =>
+    String(input).includes("/api/currencies") ? currenciesPage(currencies) : accountsPage(accounts));
 }
 
 function deferred() {
@@ -76,7 +109,7 @@ afterEach(() => {
 
 describe("A — شاشة شجرة الحسابات", () => {
   it("A01: حسابات المصدر تصل الشبكة صفاً صفاً بترتيبها", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => accountsPage(ACCOUNTS)));
+    vi.stubGlobal("fetch", stubBoth());
 
     renderScreen();
 
@@ -84,14 +117,14 @@ describe("A — شاشة شجرة الحسابات", () => {
 
     // ‏الوصل هو الادعاء: `useAllAccounts` ⟵ `<DataGrid>`. و`G01` تحرس الشبكة على
     // بيانات مُمرَّرة، ولا تقول شيئاً عن أن **هذه الشاشة** تمرّر ما جلبته
-    expect(bodyRowTexts().map((cells) => cells[0])).toEqual(["1200", "1100", "4100", "5100"]);
+    expect(bodyRowTexts().map((cells) => cells[0])).toEqual(["1200", "1100", "1110", "4100", "5100"]);
 
     expect(bodyRowTexts().map((cells) => cells[1])).toEqual(
       ACCOUNTS.map((account) => account.name));
   });
 
   it("A02: النوع والطبيعة **بالعربية لا بالرقم**", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => accountsPage(ACCOUNTS)));
+    vi.stubGlobal("fetch", stubBoth());
 
     renderScreen();
 
@@ -116,7 +149,7 @@ describe("A — شاشة شجرة الحسابات", () => {
   });
 
   it("A03: التجميعي يظهر **مميَّزاً بصرياً** عن التشغيلي", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => accountsPage(ACCOUNTS)));
+    vi.stubGlobal("fetch", stubBoth());
 
     renderScreen();
 
@@ -141,7 +174,11 @@ describe("A — شاشة شجرة الحسابات", () => {
   it("A04: أثناء التحميل ⟵ **لا رسالة «لا حسابات»**", async () => {
     const gate = deferred();
 
-    vi.stubGlobal("fetch", vi.fn(async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/currencies")) {
+        return currenciesPage([IQD]);
+      }
+
       await gate.promise;
       return accountsPage(ACCOUNTS);
     }));
@@ -160,11 +197,14 @@ describe("A — شاشة شجرة الحسابات", () => {
   it("A05: فشل الجلب (5xx) ⟵ رسالة الخادم ورقمه، **لا شبكة فارغة**", async () => {
     // ⚠ **5xx حصراً** — لا 401 ولا أي 4xx. وهو ما يوافق قرار الدَّين ٦: الرقم
     // يُعرض في أعطال الخادم وحدها. وحجبه في 4xx مُثبَت في `T02` فلا يُقاس هنا ثانيةً
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: false,
-      status: 503,
-      json: async () => ({ success: false, message: SERVER_MESSAGE, data: null, traceId: TRACE })
-    })));
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) =>
+      String(input).includes("/api/currencies")
+        ? currenciesPage([IQD])
+        : {
+            ok: false,
+            status: 503,
+            json: async () => ({ success: false, message: SERVER_MESSAGE, data: null, traceId: TRACE })
+          }));
 
     renderScreen();
 
@@ -178,5 +218,67 @@ describe("A — شاشة شجرة الحسابات", () => {
     expect(screen.queryByText(/لا حسابات|لا توجد/u)).toBeNull();
 
     expect(bodyRowTexts()).toHaveLength(0);
+  });
+
+  it("A06: عمود العملة يُحلّ من **السجل** لا من الحساب", async () => {
+    vi.stubGlobal("fetch", stubBoth());
+
+    renderScreen();
+
+    await waitFor(() => expect(bodyRowTexts()).toHaveLength(ACCOUNTS.length));
+
+    const bound = bodyRowTexts().find((cells) => cells[0] === "1110") ?? [];
+
+    // ‏الحساب يحمل **معرّفاً** لا اسماً ولا رمزاً — فظهور `IQD` دليل أن السجل حلّه.
+    // وهو ادعاء الدَّين ٢ بعينه: `GET /api/currencies` ⟵ السجل ⟵ معرّف ⟵ معروض
+    expect(bound[6]).toBe(IQD.code);
+  });
+
+  it("A07: حساب **بلا عملة** ⟵ خلية محايدة لا إنذار", async () => {
+    vi.stubGlobal("fetch", stubBoth());
+
+    renderScreen();
+
+    await waitFor(() => expect(bodyRowTexts()).toHaveLength(ACCOUNTS.length));
+
+    const unbound = bodyRowTexts().find((cells) => cells[0] === "1100") ?? [];
+
+    // ‏`currencyId` قابل للعدم في العقد، و«غير مقيَّد بعملة» حالة مشروعة لا خطأ.
+    // فلا يُطلق R-RPT-06 عليها — وهو إنذار للمبلغ بلا عملة، لا للحساب بلا تقييد
+    expect(unbound[6]).toBe("—");
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("A08: أثناء تحميل السجل ⟵ العملة **لا تُعرض «مجهولة»**", async () => {
+    const gate = deferred();
+
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/currencies")) {
+        await gate.promise;
+        return currenciesPage([IQD]);
+      }
+
+      return accountsPage(ACCOUNTS);
+    }));
+
+    renderScreen();
+
+    await waitFor(() => expect(bodyRowTexts()).toHaveLength(ACCOUNTS.length));
+
+    const bound = bodyRowTexts().find((cells) => cells[0] === "1110") ?? [];
+
+    // ‏السجل لم يصل بعد، والحساب **مقيَّد بعملة فعلاً** — فادعاء أنها «غير معروفة»
+    // كذب على المستخدم. نمط `C01` نفسه، على مستهلك جديد بفرعه الخاص
+    expect(bound[6]).not.toBe("غير معروفة");
+    expect(bound[6]).not.toBe(IQD.code);
+
+    gate.release();
+
+    await waitFor(() => {
+      const row = bodyRowTexts().find((cells) => cells[0] === "1110") ?? [];
+
+      expect(row[6]).toBe(IQD.code);
+    });
   });
 });

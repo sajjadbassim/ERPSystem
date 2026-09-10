@@ -3,6 +3,7 @@ import { useAllAccounts } from "../api/useAllAccounts";
 import type { AccountItem } from "../api/useAccounts";
 import { DataGrid } from "../components/data-grid/DataGrid";
 import type { GridColumn } from "../components/data-grid/DataGrid";
+import { useCurrencyLookup } from "../currency/currency-registry";
 import { ACCOUNT_TYPE_LABELS, NORMAL_BALANCE_LABELS } from "./account-labels";
 
 // ‏الأعمدة الستة من `AccountResponseDto` المقيس. وما لا يُعرض مقصود: `id` و`companyId`
@@ -36,8 +37,41 @@ const COLUMNS: GridColumn<AccountItem>[] = [
     id: "isActive",
     header: "نشط",
     accessorFn: (account) => (account.isActive ? "نشط" : "معطَّل")
+  },
+
+  // ‏العملة **لا تُشتق بمُلحِق** بخلاف بقية الأعمدة: حلّها يحتاج قراءة السجل، وهي
+  // هوك لا يُستدعى إلا داخل مكوّن. فالخلية مكوّن، والفرز عليها خارج نطاق هذه القطعة
+  {
+    id: "currency",
+    header: "العملة",
+    cell: (context) => <CurrencyCell currencyId={context.row.original.currencyId ?? null} />
   }
 ];
+
+// ‏**ثلاث حالات لا اثنتان** — وهي عين تمييز الدَّين ٢:
+//
+//   `null`            ⟵ الحساب **غير مقيَّد بعملة**، وهي حالة مشروعة في العقد
+//                        (`currencyId: null | string`) لا خطأ. فخلية محايدة.
+//   السجل لم يجهز     ⟵ «لا أعرف بعد» — ولا يُقال «غير معروفة» فيُتَّهم صفٌّ سليم
+//   جهز ولم يجد       ⟵ **هنا وحدها** يُعلَن الجهل
+//
+// ‏ودمج الأولى أو الثانية في الثالثة كان يجعل الإنذار يظهر على صفوف لا عيب فيها،
+// فيتعوّد المستخدم عليه ويفقد معناه. يحرسه `A07` و`A08`
+function CurrencyCell({ currencyId }: { currencyId: string | null }) {
+  const { isReady, currency } = useCurrencyLookup(currencyId ?? "");
+
+  if (currencyId === null) {
+    return <span>—</span>;
+  }
+
+  if (!isReady) {
+    return <span aria-busy="true">…</span>;
+  }
+
+  // ‏الرمز أولاً ثم الكود — نفس سقوط `<MoneyDisplay>` (R-RPT-04)، ولم يُستخرج
+  // مشتركاً بعدُ: قرار `V10` قائم، وسطرٌ مكرَّر أرخص من تجريد سابق لأوانه
+  return <span>{currency === undefined ? "غير معروفة" : currency.code}</span>;
+}
 
 // ‏عرض الفشل: الرسالة، ورقم التتبّع **إن كان عطل خادم** (قرار الدَّين ٦). وثالث
 // مستهلك لهذه القاعدة — والقاعدة نفسها مستخرَجة في `traceIdToShow`، والمتبقّي شكل
