@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { components } from "../../api-types/schema";
 import { useAuth } from "../auth/AuthProvider";
+import { ApiError, readFailure } from "./api-error";
 import { apiFetch } from "./http";
 import { MASTER_DATA_STALE_TIME } from "./query-config";
 import type { AccountItem } from "./useAccounts";
@@ -37,7 +38,8 @@ async function fetchAllAccounts(): Promise<AccountItem[]> {
       `/api/accounts?PageNumber=${pageNumber}&PageSize=${PAGE_SIZE}`);
 
     if (!response.ok) {
-      throw new Error(`تعذّر جلب الحسابات (${response.status}).`);
+      // ‏رسالة الخادم ورقم تتبّعه يصلان المستدعي (الدَّين ٦)
+      throw new ApiError(await readFailure(response, `تعذّر جلب الحسابات (${response.status}).`));
     }
 
     const body = (await response.json()) as AccountsEnvelope;

@@ -1,3 +1,4 @@
+import { traceIdToShow } from "../api/api-error";
 import { SubmitButton, TextField, ZodForm } from "../forms/ZodForm";
 import { loginSchema } from "../schemas/login-schema";
 import { useAuth } from "./AuthProvider";
@@ -23,7 +24,17 @@ export function LoginScreen() {
 
       {/* ‏`role="alert"` لا نصّاً مجرداً: فشل الدخول حدث يجب أن يبلغ قارئ الشاشة
           فور وقوعه، لا أن ينتظر أن يتصفّح المستخدم الصفحة بحثاً عنه */}
-      {error === null ? null : <p role="alert">{error}</p>}
+      {error === null ? null : (
+        <p role="alert">
+          {error.message}
+
+          {/* ‏`traceIdToShow` لا شرط مكتوب هنا: القاعدة واحدة تعيش في موضع واحد.
+              ونسخها في كل شاشة كان يجعلها تنحرف — إحداها تُظهره في 401 والأخرى لا */}
+          {traceIdToShow(error) === null ? null : (
+            <span>{` رقم التتبّع: ${traceIdToShow(error) ?? ""}`}</span>
+          )}
+        </p>
+      )}
 
       <SubmitButton>تسجيل الدخول</SubmitButton>
     </ZodForm>

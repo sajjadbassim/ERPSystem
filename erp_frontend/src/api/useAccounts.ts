@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { components } from "../../api-types/schema";
+import { ApiError, readFailure } from "./api-error";
 
 export type AccountItem = components["schemas"]["AccountResponseDto"];
 
@@ -39,7 +40,7 @@ async function fetchAccounts(): Promise<AccountsPage> {
   // تبدو **شجرة حسابات فارغة** — رقم صحيح المعنى خاطئ السبب، وهو الفشل المفتوح
   // الذي يمنعه المشروع كله. يحرسه `Q06`، وأُثبت بعطل متعمَّد.
   if (!response.ok) {
-    throw new Error(`تعذّر جلب الحسابات (${response.status}).`);
+    throw new ApiError(await readFailure(response, `تعذّر جلب الحسابات (${response.status}).`));
   }
 
   const body = (await response.json()) as AccountsEnvelope;

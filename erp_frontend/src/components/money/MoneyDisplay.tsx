@@ -1,6 +1,6 @@
 import Big from "big.js";
 
-import { useCurrency } from "../../currency/currency-registry";
+import { useCurrencyLookup } from "../../currency/currency-registry";
 
 export type MoneyDisplayProps = {
   // ‏نصّ كما يصل من السلك، بلا `Number` (R-API-03)
@@ -33,7 +33,17 @@ function formatAmount(amount: string, decimalPlaces: number): string {
 }
 
 export function MoneyDisplay(props: MoneyDisplayProps) {
-  const currency = useCurrency(props.currencyId);
+  const { isReady, currency } = useCurrencyLookup(props.currencyId);
+
+  // ‏**«لم يُحمَّل بعد» ليست «عملة مجهولة»** (الدَّين ٢، 2026-09-10). وبلا هذا الفرع
+  // كان كل مبلغ يومض بإنذار R-RPT-06 ريثما يصل السجل — فيصير الإنذار الذي وُجد
+  // ليكون استثناءً مشهداً معتاداً، ويتعلّم المستخدم تجاهله. يحرسه `C01`.
+  //
+  // ‏ولا يُعرض الرقم هنا أيضاً: R-RPT-06 قائم في الحالتين — الرقم بلا عملته ممنوع
+  // سواء أكانت مجهولة أم لم تصل بعد
+  if (!isReady) {
+    return <span aria-busy="true">…</span>;
+  }
 
   // ‏R-RPT-06: الرقم بلا عملته صحيح عددياً وخاطئ في معناه — وعرضه أسوأ من عدم عرضه.
   // فلا يُعرض `props.amount` هنا بحال
