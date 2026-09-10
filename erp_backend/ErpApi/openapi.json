@@ -2949,14 +2949,6 @@
           "creditFC": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": "string"
-          },
-          "debitBase": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": "string"
-          },
-          "creditBase": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": "string"
           }
         }
       },

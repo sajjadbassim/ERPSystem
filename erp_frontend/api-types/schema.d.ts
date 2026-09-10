@@ -1652,8 +1652,6 @@ export interface components {
             exchangeRateDate: string;
             debitFC?: string;
             creditFC?: string;
-            debitBase?: string;
-            creditBase?: string;
         };
         JournalLineResponseDto: {
             /** Format: uuid */

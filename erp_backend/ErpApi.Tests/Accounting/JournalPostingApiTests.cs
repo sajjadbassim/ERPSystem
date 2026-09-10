@@ -7,20 +7,21 @@ namespace ErpApi.Tests.Accounting;
 // لا رمز الاستجابة وحده: 201 على نقطة نهاية لا تُرحّل شيئاً تبدو نجاحاً وهي فراغ
 public class JournalPostingApiTests(TestDatabase database) : IdentityTestBase(database)
 {
+    // ‏**بلا `debitBase`/`creditBase`** — أُسقطا من `JournalLineCreateDto` إنفاذاً
+    // لـR-API-01، فالخلفية تحسبهما. وحمولة تُرسلهما تصف عقداً منقضياً وإن مرّت
+    // (`System.Text.Json` يتجاهل غير المعرَّف افتراضياً)
     private static object Line(
         Guid accountId, Guid currencyId, string debitFc, string creditFc,
-        string debitBase, string creditBase) =>
+        string rate = "1.000000000000") =>
         new
         {
             accountId,
             description = "سطر اختبار",
             currencyId,
-            exchangeRate = "1.000000000000",
+            exchangeRate = rate,
             exchangeRateDate = "2026-06-15",
             debitFC = debitFc,
-            creditFC = creditFc,
-            debitBase,
-            creditBase
+            creditFC = creditFc
         };
 
     private static object NewEntry(Scenario company, string amount = "400.0000") =>
@@ -33,10 +34,64 @@ public class JournalPostingApiTests(TestDatabase database) : IdentityTestBase(da
             sourceModule = (byte)1,
             lines = new[]
             {
-                Line(company.CashAccountId, company.BaseCurrencyId, amount, "0.0000", amount, "0.0000"),
-                Line(company.RevenueAccountId, company.BaseCurrencyId, "0.0000", amount, "0.0000", amount)
+                Line(company.CashAccountId, company.BaseCurrencyId, amount, "0.0000"),
+                Line(company.RevenueAccountId, company.BaseCurrencyId, "0.0000", amount)
             }
         };
+
+    // L35 — **الحارس على سياسة التقريب في الخدمة.**
+    //
+    // بعد إسقاط DebitBase/CreditBase من العقد صارت الخدمة تحسبهما، وسياسة التقريب
+    // فيها ليست تفصيلاً: SQL Server يقرّب النصف **بعيداً عن الصفر**، و Math.Round
+    // الافتراضي في C# **مصرفيّ** (إلى الزوج). فالفرق يظهر عند كل نصف بالضبط.
+    //
+    // والقيمتان مختارتان ليقع الناتج على نصف تماماً ويكون الرقم الرابع **زوجياً**،
+    // وهي الحالة الوحيدة التي تفترق فيها السياستان:
+    //
+    //     0.5000 × 3.0005 = 1.50025
+    //       بعيداً عن الصفر ⟶ 1.5003   (وهو ما يفعله الإجراء)
+    //       مصرفيّ          ⟶ 1.5002   (الرابع «2» زوجيّ فيبقى)
+    //
+    // ⚠ ولا يكفي أن يمرّ الترحيل: الفرق بينهما **0.0001 بالضبط**، وحدّ الضابط 50001
+    // و CK_JournalLine_BaseEqualsConverted كلاهما `> 0.0001` — أي أن السياسة الخاطئة
+    // **تعبر الحارسين صامتة**. ولهذا يقرأ هذا الاختبار **القيمة المخزَّنة نفسها**،
+    // لا رمز الحالة ولا مجرد نجاح الترحيل.
+    [Fact]
+    public async Task L35_PostEntry_RoundsBaseAmountAwayFromZero_NotToEven()
+    {
+        var identity = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client,
+            AccountingClient.JournalEntriesPath, accessToken, new
+            {
+                branchId = identity.Company.BranchId,
+                postingDate = "2026-06-15",
+                documentDate = "2026-06-15",
+                description = "قيد بعملة أجنبية يقع تحويله على نصف تماماً",
+                sourceModule = (byte)1,
+                lines = new[]
+                {
+                    // الحساب مقيَّد بالدولار، والإيرادات بلا عملة فتقبل أي عملة
+                    Line(identity.Company.UsdBankAccountId, identity.Company.UsdCurrencyId,
+                        "0.5000", "0.0000", "3.000500000000"),
+                    Line(identity.Company.RevenueAccountId, identity.Company.UsdCurrencyId,
+                        "0.0000", "0.5000", "3.000500000000")
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var data = await AccountingClient.ReadDataAsync(response);
+        var entryId = Guid.Parse(AccountingClient.Field(data, "id")!);
+
+        var storedDebitBase = await PostingClient.ScalarAsync<decimal>(Database,
+            "SELECT DebitBase FROM JournalLines WHERE JournalEntryId = @id AND DebitFC > 0",
+            ("@id", entryId));
+
+        // 1.5003 لا 1.5002 — والفرق كله في السياسة لا في الصيغة
+        Assert.Equal(1.5003m, storedDebitBase);
+    }
 
     // L22 — الأثر الفعلي: رأس وسطران في القاعدة، لا مجرد 201
     [Fact]
@@ -112,9 +167,9 @@ public class JournalPostingApiTests(TestDatabase database) : IdentityTestBase(da
                 lines = new[]
                 {
                     Line(identity.Company.CashAccountId, identity.Company.BaseCurrencyId,
-                        "500.0000", "0.0000", "500.0000", "0.0000"),
+                        "500.0000", "0.0000"),
                     Line(identity.Company.RevenueAccountId, identity.Company.BaseCurrencyId,
-                        "0.0000", "400.0000", "0.0000", "400.0000")
+                        "0.0000", "400.0000")
                 }
             });
 
@@ -147,9 +202,9 @@ public class JournalPostingApiTests(TestDatabase database) : IdentityTestBase(da
                 lines = new[]
                 {
                     Line(identity.Company.CashAccountId, identity.Company.BaseCurrencyId,
-                        "100.0000", "0.0000", "100.0000", "0.0000"),
+                        "100.0000", "0.0000"),
                     Line(identity.Company.RevenueAccountId, identity.Company.BaseCurrencyId,
-                        "0.0000", "100.0000", "0.0000", "100.0000")
+                        "0.0000", "100.0000")
                 }
             });
 

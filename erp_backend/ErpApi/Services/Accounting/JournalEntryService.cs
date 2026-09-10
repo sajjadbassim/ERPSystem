@@ -66,6 +66,19 @@ public class JournalEntryService : IJournalEntryService
         return Map(entry, await _lineRepository.GetByEntryAsync(id, ct));
     }
 
+    // المقابل بعملة الدفاتر — **يُحسب هنا ولا يُطلب من الواجهة** (R-API-01).
+    //
+    // ‏`MidpointRounding.AwayFromZero` إلزاميّ لا تفضيل: `ROUND` في SQL Server يقرّب
+    // النصف بعيداً عن الصفر، و`Math.Round` الافتراضي **مصرفيّ** (إلى الزوج). والفرق
+    // بينهما يظهر عند كل نصف بالضبط، فيُنتج قيمة يرفضها الضابط 50015 في الإجراء
+    // (`ABS(DebitBase - ROUND(DebitFC * ExchangeRate, 4)) > 0.0001`) و
+    // `CK_JournalLine_BaseEqualsConverted` في القاعدة.
+    //
+    // والصيغة مطابقة لصيغة الإجراء حرفاً بحرف: أربع خانات، والضرب قبل التقريب.
+    // فالخدمة تُنتج ما كان الإجراء سيتحقق منه — لا تقريباً مستقلاً يصادف الموافقة.
+    private static decimal ToBase(decimal amountFc, decimal exchangeRate) =>
+        Math.Round(amountFc * exchangeRate, 4, MidpointRounding.AwayFromZero);
+
     public async Task<JournalEntryResponseDto> PostAsync(
         PostJournalEntryRequestDto request, CancellationToken ct = default)
     {
@@ -85,8 +98,8 @@ public class JournalEntryService : IJournalEntryService
                 line.ExchangeRateDate,
                 line.DebitFC,
                 line.CreditFC,
-                line.DebitBase,
-                line.CreditBase))
+                ToBase(line.DebitFC, line.ExchangeRate),
+                ToBase(line.CreditFC, line.ExchangeRate)))
             .ToList();
 
         var result = await _postingGateway.PostAsync(

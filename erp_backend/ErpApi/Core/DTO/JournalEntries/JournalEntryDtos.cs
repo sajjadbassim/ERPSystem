@@ -23,8 +23,19 @@ public class JournalLineCreateDto
 
     public decimal DebitFC { get; set; }
     public decimal CreditFC { get; set; }
-    public decimal DebitBase { get; set; }
-    public decimal CreditBase { get; set; }
+
+    // DebitBase و CreditBase **ليسا هنا بقصد** — إنفاذاً لـ R-API-01 [صارم]:
+    // «الواجهة لا تحسب، لا تحوّل عملة… تعرض ما يصلها فقط».
+    //
+    // كانا حقلين في هذا الـDTO، فكان العقد **يطلب من الواجهة أن تضرب المبلغ في
+    // السعر** — وهو نصّ ما تمنعه القاعدة. والقاعدة تتحقق من الناتج (الخطأ 50015)
+    // فلا يمرّ خطأ، لكن **مصدر** الرقم كان الواجهة.
+    //
+    // وإسقاطهما يجعل الخرق **مستحيلاً بنيوياً** لا مرفوضاً بالانضباط — منطق R-GL-05
+    // نفسه (DENY في القاعدة بدل الاعتماد على الالتزام). وحقلٌ اختياري يُحسب عند غيابه
+    // كان سيُبقي الواجهة قادرة على الحساب، أي يفشل مفتوحاً.
+    //
+    // يحسبهما JournalEntryService.PostAsync، وتُرجعهما JournalLineResponseDto تأكيداً.
 }
 
 public class PostJournalEntryRequestDto
