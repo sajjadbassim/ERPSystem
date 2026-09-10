@@ -42,13 +42,17 @@ function tokenEnvelope() {
   return { success: true, message: null, data: TOKENS, traceId: null };
 }
 
-function branchesEnvelope() {
+// ‏⚠ **تغيير مقصود (2026-09-10):** كانت هذه الدالة تُرجع فرعاً (`DEV-01`) لأن
+// ‏`<ProtectedHome>` كانت تعرض الفروع. وقد خلفتها `<AccountsScreen>`، فصار المصدر
+// المحميّ الذي يناديه التطبيق هو `/api/accounts`. **والادعاء لم يتغيّر** — أن
+// الرمز يُرفَق وأن ما يعود يُعرض — بل تغيّر المورد الذي يُقاس عليه
+function accountsEnvelope() {
   return {
     success: true,
     message: null,
     traceId: null,
     data: {
-      data: [{ id: "0199a1f0-0000-7000-8000-000000000001", companyId: "0199a1f0-0000-7000-8000-000000000002", code: "DEV-01", name: "الفرع الرئيسي", isActive: true }],
+      data: [{ id: "0199a1f0-0000-7000-8000-000000000001", companyId: "0199a1f0-0000-7000-8000-000000000002", code: "1100", name: "النقدية بالصندوق", accountType: 1, normalBalance: 0, isPostable: true, isActive: true }],
       totalCount: 1,
       pageNumber: 1,
       pageSize: 100,
@@ -69,10 +73,10 @@ function stubRoutes(handler: (call: StubbedCall, index: number) => unknown) {
   return fetchMock;
 }
 
-// ‏الطريق المعتاد: الدخول ينجح وقائمة الفروع تُرجع فرعاً واحداً
+// ‏الطريق المعتاد: الدخول ينجح، وشجرة الحسابات تُرجع حساباً واحداً
 function stubHappyPath() {
   return stubRoutes((call) =>
-    call.url.includes("/api/auth/login") ? jsonResponse(tokenEnvelope()) : jsonResponse(branchesEnvelope()));
+    call.url.includes("/api/auth/login") ? jsonResponse(tokenEnvelope()) : jsonResponse(accountsEnvelope()));
 }
 
 function renderApp() {
@@ -196,7 +200,7 @@ describe("LGN — شاشة الدخول وبوابتها", () => {
         return jsonResponse(tokenEnvelope());
       }
 
-      return jsonResponse(branchesEnvelope());
+      return jsonResponse(accountsEnvelope());
     });
 
     renderApp();
@@ -268,10 +272,10 @@ describe("LGN — شاشة الدخول وبوابتها", () => {
     submit();
 
     // ‏الشاهد على أن سلسلة النقل كاملة: النموذج ⟵ الرمز ⟵ الترويسة ⟵ محتوى معروض
-    expect(await screen.findByText(/DEV-01/u)).not.toBeNull();
+    expect(await screen.findByText(/1100/u)).not.toBeNull();
 
-    const branchCall = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/branches"));
+    const protectedCall = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/accounts"));
 
-    expect(new Headers(branchCall?.[1]?.headers).get("Authorization")).toBe(`Bearer ${TOKENS.accessToken}`);
+    expect(new Headers(protectedCall?.[1]?.headers).get("Authorization")).toBe(`Bearer ${TOKENS.accessToken}`);
   });
 });

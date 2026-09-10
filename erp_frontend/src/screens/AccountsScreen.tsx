@@ -1,0 +1,78 @@
+import { ApiError, traceIdToShow } from "../api/api-error";
+import { useAllAccounts } from "../api/useAllAccounts";
+import type { AccountItem } from "../api/useAccounts";
+import { DataGrid } from "../components/data-grid/DataGrid";
+import type { GridColumn } from "../components/data-grid/DataGrid";
+import { ACCOUNT_TYPE_LABELS, NORMAL_BALANCE_LABELS } from "./account-labels";
+
+// ‏الأعمدة الستة من `AccountResponseDto` المقيس. وما لا يُعرض مقصود: `id` و`companyId`
+// و`parentAccountId` و`currencyId` معرّفات بلا معنى بصريّ، و`systemAccountRole` بلا
+// مستهلك — ولا يُعرض حقل لأنه موجود.
+const COLUMNS: GridColumn<AccountItem>[] = [
+  { accessorKey: "code", header: "رمز الحساب" },
+  { accessorKey: "name", header: "اسم الحساب" },
+
+  // ‏`accessorFn` لا `accessorKey`: القيمة المعروضة **مشتقّة** لا منسوخة. والترجمة
+  // في المُلحِق لا في `cell` كي يفرز العمود على النصّ العربي المعروض لا على الرقم
+  {
+    id: "accountType",
+    header: "النوع",
+    accessorFn: (account) => ACCOUNT_TYPE_LABELS[account.accountType]
+  },
+  {
+    id: "normalBalance",
+    header: "الطبيعة",
+    accessorFn: (account) => NORMAL_BALANCE_LABELS[account.normalBalance]
+  },
+
+  // ‏نصّ صريح لا علامة عامة: «تجميعي» يقول للمحاسب **ما هو الحساب**، بينما خلية
+  // فارغة مقابل خلية فيها علامة تقول «شيء ما مختلف» ولا تقول ماذا. يحرسه `A03`
+  {
+    id: "isPostable",
+    header: "قابل للترحيل",
+    accessorFn: (account) => (account.isPostable ? "نعم" : "تجميعي")
+  },
+  {
+    id: "isActive",
+    header: "نشط",
+    accessorFn: (account) => (account.isActive ? "نشط" : "معطَّل")
+  }
+];
+
+// ‏عرض الفشل: الرسالة، ورقم التتبّع **إن كان عطل خادم** (قرار الدَّين ٦). وثالث
+// مستهلك لهذه القاعدة — والقاعدة نفسها مستخرَجة في `traceIdToShow`، والمتبقّي شكل
+// لا منطق. ويُعاد النظر في استخراجه مكوّناً مشتركاً إن ظهر رابع
+function AccountsError({ error }: { error: Error }) {
+  const failure = error instanceof ApiError ? error.failure : null;
+  const traceId = failure === null ? null : traceIdToShow(failure);
+
+  return (
+    <p role="alert">
+      {error.message}
+      {traceId === null ? null : <span>{` رقم التتبّع: ${traceId}`}</span>}
+    </p>
+  );
+}
+
+export function AccountsScreen() {
+  const { status, accounts, error } = useAllAccounts();
+
+  return (
+    <>
+      <h1>شجرة الحسابات</h1>
+
+      {/* ‏**الفصل بين «لم تصل بعد» و«لا شيء»** — نمط `C01` و`Q06` نفسه: شبكة فارغة
+          أثناء التحميل تقول «لا حسابات» وهي لم تسأل بعد. فلا يُرندَر جسم الشبكة
+          أصلاً قبل أن يستقرّ الاستعلام. يحرسه `A04` */}
+      {status === "pending" ? <p>جارٍ تحميل شجرة الحسابات…</p> : null}
+
+      {/* ‏والخطأ لا يُبتلع في «لا حسابات»: انقطاع الخادم كان سيبدو شجرة فارغة —
+          وهو الفشل المفتوح الذي وُجدت `Q06` له. يحرسه `A05` */}
+      {status === "error" && error !== null ? <AccountsError error={error} /> : null}
+
+      {status === "success" ? (
+        <DataGrid rows={accounts} columns={COLUMNS} emptyMessage="لا حسابات مسجَّلة." />
+      ) : null}
+    </>
+  );
+}

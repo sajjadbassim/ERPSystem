@@ -122,16 +122,21 @@ describe("T — رسالة الخادم و traceId", () => {
   it("T04: استعلام محميّ يفشل (500) ⟵ رسالة الخادم ورقمه، لا نصّ من تأليفنا", async () => {
     setTokens(TOKENS);
 
+    // ‏⚠ المورد `/api/accounts` لا `/api/branches` بعد أن خلفت `<AccountsScreen>`
+    // مكوّن `<ProtectedHome>` — تغيير مقصود في **ما يُقاس عليه**، لا في الادعاء
     stubRoutes((url) =>
-      url.includes("/api/branches")
+      url.includes("/api/accounts")
         ? jsonResponse({ success: false, message: SERVER_MESSAGE, data: null, traceId: TRACE }, 500)
         : jsonResponse({ success: true, data: null }));
 
     renderApp();
 
     // ‏قبل هذا الدَّين كان المعروض `تعذّر جلب الفروع (500).` — رسالة من تأليفنا
-    // بالرمز، بينما الاستجابة تحمل ما هو أدقّ منها
-    expect(await screen.findByText(SERVER_MESSAGE)).not.toBeNull();
+    // بالرمز، بينما الاستجابة تحمل ما هو أدقّ منها.
+    //
+    // ‏والمهلة أوسع من الافتراضية **بأثر قرار `QC` لا بضعف في الحالة**: الخمسمئة
+    // عطل عابر محتمل فتُعاد مرة واحدة، فيستقرّ الخطأ بعد تأخير الإعادة لا فوراً
+    expect(await screen.findByText(SERVER_MESSAGE, {}, { timeout: 5000 })).not.toBeNull();
 
     expect(screen.getAllByText(new RegExp(TRACE, "u"))).toHaveLength(1);
   });

@@ -14,6 +14,10 @@ export type UseAllAccountsResult = {
 
   // ‏قائمة لا `undefined` أبداً — النهج نفسه المعتمَد في `useAccounts`
   accounts: AccountItem[];
+
+  // ‏**الخطأ يبلغ المستهلك** (الدَّين ٦): بدونه لا تملك الشاشة إلا أن تعرض نصّاً
+  // من تأليفها، فتُهدَر رسالة الخادم ورقم تتبّعها. يحرسه `A05`
+  error: Error | null;
 };
 
 // ‏`MaxPageSize = 100` في قواعد الباك-إند (بند 10)، فطلب أكثر منه يُقلَّص صامتاً
@@ -78,6 +82,7 @@ export function useAllAccounts(): UseAllAccountsResult {
 
   return {
     status: query.status,
-    accounts: query.data ?? []
+    accounts: query.data ?? [],
+    error: query.error
   };
 }

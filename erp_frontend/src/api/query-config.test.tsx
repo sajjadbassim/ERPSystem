@@ -57,10 +57,12 @@ afterEach(() => {
 });
 
 describe("QC — إعدادات QueryClient المطبَّقة", () => {
-  it("QC01: استعلام فاشل ⟵ نداء واحد لا أربعة (retry = 0)", async () => {
+  it("QC01: فشل **غير قابل للإعادة** (403) ⟵ نداء واحد لا أربعة", async () => {
     setTokens(TOKENS);
 
-    const fetchMock = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) }));
+    // ‏403 لا 401: الأخيرة تُطلق مسار التجديد في `apiFetch` فتخلط آليتين في قياس
+    // واحد. و403 تمرّ كما هي، فيبقى المقيس هو **إعادة الاستعلام** وحدها
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -70,9 +72,31 @@ describe("QC — إعدادات QueryClient المطبَّقة", () => {
 
     await waitFor(() => expect(screen.getByText(/^(pending|success|error):/u).textContent).toBe("error:0"));
 
-    // ‏افتراض المكتبة **ثلاث إعادات** ⟵ أربعة نداءات. والقرار صفر ⟵ نداء واحد.
-    // ‏والفرق ليس رقماً: الإعادة هنا تعيد **حلقة الصفحات كلها** من أولها
+    // ‏افتراض المكتبة **ثلاث إعادات** ⟵ أربعة نداءات. و403 **جواب مقصود** من الخادم
+    // لا عطل عابر: تكراره لا يغيّره، ويؤخّر ظهور الخطأ بلا مقابل
     expect(accountCalls(fetchMock)).toHaveLength(1);
+  });
+
+  it("QC03: عطل خادم عابر (503) ⟵ نداءان — إعادة **واحدة** لا ثلاث ولا صفر", async () => {
+    setTokens(TOKENS);
+
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <AppRoot>
+        <AccountsProbe />
+      </AppRoot>);
+
+    // ‏المهلة أوسع من الافتراضية: بين المحاولتين تأخير المكتبة (نحو ثانية)، وهو
+    // مقصود — إعادة فورية لا تمنح البلعة العابرة وقتاً لتنقضي
+    await waitFor(
+      () => expect(screen.getByText(/^(pending|success|error):/u).textContent).toBe("error:0"),
+      { timeout: 5000 });
+
+    // ‏الطرفان مقيسان معاً: **ليست صفراً** (فالبلعة العابرة كانت ستصير شاشة خطأ)،
+    // ‏**وليست ثلاثاً** (فالإعادة هنا تعيد حلقة الصفحات كلها من أولها)
+    expect(accountCalls(fetchMock)).toHaveLength(2);
   });
 
   it("QC02: بيانات مرجعية ⟵ تركيب ثانٍ لا يُعيد الجلب (staleTime معلَن)", async () => {

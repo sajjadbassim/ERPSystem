@@ -59,6 +59,22 @@ export class ApiError extends Error {
   }
 }
 
+// ‏**قابل لإعادة المحاولة = عطل عابر محتمل، لا كل عطل خادم.**
+//
+// ‏ولا تُستعمل `isServerFault` هنا رغم قربها: هي تشمل `status === null`، وعندنا
+// معنيان مختلفان لهذه القيمة — فشل نقل (عابر، يُعاد) وتجاوز سقف الصفحات (حتميّ،
+// وإعادته تكرّر مئة نداء بلا أمل). فالدمج كان سيجعل السقف يُقصف مرتين.
+//
+// ‏و`TypeError` هو ما يرفض به `fetch` عند انقطاع الشبكة — فهو توقيع فشل النقل،
+// ولا يمرّ بـ`ApiError` أصلاً لأنه يقع قبل أن تكون هناك استجابة تُقرأ.
+export function isRetryableFailure(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.failure.status !== null && error.failure.status >= 500;
+  }
+
+  return error instanceof TypeError;
+}
+
 // ‏رقم التتبّع كما يُعرض — أو `null` إن لم يكن ليُعرض. مُجمَّعة هنا لا في كل شاشة
 // كي لا تنحرف القاعدة بين موضعين: إحداهما تُظهره في 401 والأخرى لا.
 //
