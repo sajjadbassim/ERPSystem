@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { components } from "../api-types/schema";
 import { apiFetch } from "./api/http";
+import { MASTER_DATA_STALE_TIME } from "./api/query-config";
 import { useAuth } from "./auth/AuthProvider";
 import { LoginScreen } from "./auth/LoginScreen";
 
@@ -14,6 +15,10 @@ type Branch = components["schemas"]["BranchResponseDto"];
 function ProtectedHome() {
   const query = useQuery<Branch[]>({
     queryKey: ["branches"],
+
+    // ‏الفروع بيانات مرجعية كشجرة الحسابات — تُعلن بياتها صراحةً (قرار `QC`)
+    staleTime: MASTER_DATA_STALE_TIME,
+
     queryFn: async () => {
       const response = await apiFetch("/api/branches");
 

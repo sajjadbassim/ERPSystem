@@ -229,8 +229,8 @@ describe("LGN — شاشة الدخول وبوابتها", () => {
     expect(screen.queryByRole("button", { name: "تسجيل الدخول" })).toBeNull();
   });
 
-  it("LGN07: حقول فارغة ⟵ رسائل تحت حقولها، وصفر نداء شبكة", async () => {
-    const fetchMock = stubHappyPath();
+  it("LGN07: حقول فارغة ⟵ رسائل تحت حقولها", async () => {
+    stubHappyPath();
 
     renderApp();
     submit();
@@ -240,6 +240,21 @@ describe("LGN — شاشة الدخول وبوابتها", () => {
       expect(screen.getByLabelText("اسم المستخدم")).toHaveAccessibleDescription(/اسم المستخدم/u));
 
     expect(screen.getByLabelText("كلمة المرور")).toHaveAccessibleDescription(/كلمة المرور/u);
+  });
+
+  it("LGN09: حقول فارغة ⟵ صفر نداء دخول", async () => {
+    const fetchMock = stubHappyPath();
+
+    renderApp();
+    submit();
+
+    // ‏**مهلة صريحة لا انتظار ظهور الرسالة.** ولو كان الانتظار على الرسالة لصار
+    // هذا الحارس يرسب على **بوابته** لا على ادعائه متى عُطِّل التحقق — وهو فخّ
+    // ‏`F04` بعينه، وقد وقعت فيه `LGN07` القديمة حين جمعت الادعاءين في حالة واحدة.
+    // فالفصل إلى حالتين هو ما جعل هذا الادعاء **قابلاً للرسوب** أصلاً
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
 
     // ‏والحجب هو الادعاء: رسالة تظهر **ويُرسل الطلب** أسوأ من لا رسالة
     expect(loginCalls(fetchMock)).toHaveLength(0);

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { components } from "../../api-types/schema";
 import { useAuth } from "../auth/AuthProvider";
 import { apiFetch } from "./http";
+import { MASTER_DATA_STALE_TIME } from "./query-config";
 import type { AccountItem } from "./useAccounts";
 
 type AccountsEnvelope = components["schemas"]["ApiResponseOfPagedResponseOfAccountResponseDto"];
@@ -65,7 +66,12 @@ export function useAllAccounts(): UseAllAccountsResult {
   const query = useQuery({
     queryKey: ["accounts", "all"],
     queryFn: fetchAllAccounts,
-    enabled: status === "authenticated"
+    enabled: status === "authenticated",
+
+    // ‏**البيات يُعلَن ولا يُورَث** (قرار `QC`): الافتراض العام `staleTime: 0` لأن
+    // الطزاجة هي الفشل المغلق للمال. وشجرة الحسابات بيانات مرجعية بطيئة التغيّر،
+    // وثمن إعادة جلبها **حلقة صفحات** لا نداء واحد — فتُعلن بياتها صراحةً. `QC02`
+    staleTime: MASTER_DATA_STALE_TIME
   });
 
   return {
