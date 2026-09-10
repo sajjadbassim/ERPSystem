@@ -27,6 +27,11 @@ export type AuthState = {
 
 type TokenEnvelope = components["schemas"]["ApiResponseOfTokenPairDto"];
 
+// ‏رسالة **من تأليفنا بالضرورة**: لا استجابة من الخادم أصلاً فلا رسالة له تُنقل.
+// وهي متميّزة عن رسالة الاعتماد الخاطئ عمداً — من يُقال له إن بياناته خاطئة وهي
+// صحيحة يعيد إدخالها بلا نهاية بدل أن يبلّغ عن عطل. يحرسه `LGN03` و`LGN04`
+const TRANSPORT_ERROR = "تعذّر الاتصال بالخادم. تحقّق من الاتصال ثم أعد المحاولة.";
+
 const AuthContext = createContext<AuthState | null>(null);
 
 // ‏غياب المزوّد يعني «غير مسجَّل» **قطعاً** لا رمياً ولا افتراضَ دخول. والاتجاه
@@ -52,14 +57,32 @@ export function AuthProvider(props: AuthProviderProps) {
   const login = useCallback(async (credentials: LoginCredentials) => {
     setError(null);
 
-    // ‏`fetch` مباشرةً لا `apiFetch`: الدخول لا يحمل ترويسة ولا يُجدَّد عليه
-    const response = await fetch(LOGIN_PATH, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(credentials)
-    });
+    let response: Response;
+    let body: TokenEnvelope;
 
-    const body = (await response.json()) as TokenEnvelope;
+    try {
+      // ‏`fetch` مباشرةً لا `apiFetch`: الدخول لا يحمل ترويسة ولا يُجدَّد عليه
+      response = await fetch(LOGIN_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credentials)
+      });
+
+      body = (await response.json()) as TokenEnvelope;
+    } catch {
+      // ‏**الطبقتان تُلتقطان معاً بقصد:** `fetch` يرفض (لا شبكة، أو الوكيل ساقط)،
+      // و`json()` يرمي (وصل ردّ لا يُفهم — HTML من وسيط مثلاً). وكلاهما «لم يصلنا
+      // جواب مفهوم»، ولا يملك أحدهما ما يقوله للمستخدم أكثر من الآخر.
+      //
+      // ‏وقبل هذا الفرع كان الوعد **يُرفض بلا معالِج**: الشاشة تبقى كما هي والمستخدم
+      // لا يعرف أن شيئاً وقع. يحرسه `LGN04`
+      clearTokens();
+      setPair(null);
+      setError(TRANSPORT_ERROR);
+
+      return;
+    }
+
     const issued = body.data ?? null;
 
     if (!response.ok || issued === null) {

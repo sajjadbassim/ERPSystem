@@ -44,6 +44,11 @@ export function ZodForm<TValues extends FieldValues>(props: ZodFormProps<TValues
 export type TextFieldProps = {
   name: string;
   label: string;
+
+  // ‏إضافة **اختيارية** لا تغيّر سلوك أي مستهلك قائم (الافتراض `text` كما كان).
+  // ووُجدت لحاجة واحدة مقيسة: حقل كلمة المرور. وحقلٌ يعرض كلمة المرور نصّاً ظاهراً
+  // ليس «صقلاً مؤجَّلاً» بل عطب تشغيل — وهو حدّ ما يوجبه R-UI-03 لا ما يتجاوزه
+  type?: "text" | "password";
 };
 
 export function TextField(props: TextFieldProps) {
@@ -62,6 +67,7 @@ export function TextField(props: TextFieldProps) {
           تصير الأخطاء كومة واحدة لا يُعرف أيّها لأيّ حقل */}
       <input
         id={id}
+        type={props.type ?? "text"}
         aria-invalid={message === undefined ? undefined : true}
         aria-describedby={message === undefined ? undefined : errorId}
         {...register(props.name)}

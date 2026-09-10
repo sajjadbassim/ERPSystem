@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { AppThemeProvider } from "./theme/AppThemeProvider";
+import { AppRoot } from "./AppRoot";
 
 const container = document.getElementById("root");
 
@@ -11,12 +11,16 @@ if (!container) {
   throw new Error("عنصر الجذر #root غير موجود في index.html.");
 }
 
-// ‏المزوّد عند الجذر لا داخل شاشة: ذاكرة الأنماط تُنشأ مرة واحدة، ومزوّدان بمفتاحين
-// مختلفين كانا سيحقنان نسختين من كل نمط
+// ‏`<AppRoot>` لا `<AppThemeProvider>` وحده: هو من يركّب السمة ومزوّد الاستعلام
+// والمصادقة **بالترتيب الصحيح** (المصادقة داخل مزوّد الاستعلام). وقبل هذا السطر كان
+// ‏`AppRoot` مبنيّاً ومختبَراً بـ`L09` **ولا أحد يستدعيه** — فالتطبيق الجاري في
+// المتصفح بلا مزوّد استعلام. وهذا السطر بعينه هو ما يغلق الدَّين ٧، ولا يحرسه اختبار
+// لأن `main.tsx` يستدعي `createRoot` — ولهذا تُركَّب `AppRoot` في اختبارات `LGN`
+// بنفس الشكل الذي يُركَّب به هنا، فينكسر أيّ افتراق بينهما
 createRoot(container).render(
   <StrictMode>
-    <AppThemeProvider>
+    <AppRoot>
       <App />
-    </AppThemeProvider>
+    </AppRoot>
   </StrictMode>
 );
