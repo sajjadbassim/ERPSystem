@@ -18,6 +18,13 @@ coverage/
 .vite/
 vite.config.ts.timestamp-*
 
+# ‏مخرجات Playwright: لقطات الفشل والتتبّعات والتقارير — أثر تشغيل لا مصدر.
+# ‏وثنائيات المتصفحات تعيش خارج المستودع أصلاً (‏`~/AppData/Local/ms-playwright`).
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # الأسرار — بند 18: لا سلسلة اتصال ولا مفتاح JWT في أي ملف متعقَّب.
 # أسرار المستخدم تعيش خارج المستودع أصلاً، وهذه حراسة ضد النسخ سهواً إلى الداخل
 secrets.json
