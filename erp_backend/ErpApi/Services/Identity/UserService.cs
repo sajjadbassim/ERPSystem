@@ -120,7 +120,19 @@ public class UserService : IUserService
             throw new ForbiddenException(AuthMessages.BranchOutOfScope);
         }
 
-        return new BranchScope(context.User.Id, companyId, context.Has(Permissions.AllBranches));
+        var hasAllBranches = context.Has(Permissions.AllBranches);
+
+        // الأثر يُكتب على **استعمال** الصلاحية الواسعة لا على الاستفهام عنها:
+        // من يضيق نطاقه إلى فروعه المخصَّصة لم يستعملها، وأثرٌ باسمه كذبٌ على السجل.
+        // وصيغته صيغة EnsureAllBranchesScopeAsync نفسها — فسؤال «من قرأ بالنطاق
+        // الشامل ومتى» يُجاب باستعلام واحد لا باثنين (الحارس K28)
+        if (hasAllBranches)
+        {
+            await _auditService.RecordAccessAsync(
+                AuditActions.QueryAllBranches, nameof(Branch), AuditActions.AllScope, ct);
+        }
+
+        return new BranchScope(context.User.Id, companyId, hasAllBranches);
     }
 
     public async Task<IReadOnlyList<string>> GetPermissionsAsync(CancellationToken ct = default)

@@ -48,7 +48,9 @@ public interface IUserService
     // وهذه تصف النطاق ليُبنى عليه مرشِّح، فغياب `AllBranches` عندها **نتيجة لا رفض**:
     // يضيق النطاق إلى الفروع المخصَّصة ولا يُردّ الطلب.
     //
-    // ولا تكتب أثر تدقيق: لا قرار وصول يقع هنا، والأثر يُكتب حيث يقع القرار (§4.2)
+    // **وتكتب أثر تدقيق واحداً عند حمل `AllBranches` وحده** — لأن `Permissions.AllBranches`
+    // يشترط تسجيل «تنفيذ أي استعلام به»، والقراءة بالنطاق الواسع استعمالٌ له.
+    // أما تضييق النطاق إلى الفروع المخصَّصة فليس استعمالاً له، فلا أثر لـه (الحارس K28)
     Task<BranchScope> GetBranchScopeAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<string>> GetPermissionsAsync(CancellationToken ct = default);

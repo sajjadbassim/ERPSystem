@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using ErpApi.Core.Constants;
+using ErpApi.Core.Models;
 using ErpApi.Tests.Infrastructure;
 
 namespace ErpApi.Tests.MasterData;
@@ -123,6 +124,48 @@ public class BranchTests(TestDatabase database) : IdentityTestBase(database)
 
         Assert.Equal(3, totalCount);
         Assert.Equal(totalCount, BranchIdsOf(page).Count);
+    }
+
+    // K28 — استعمال النطاق الشامل يترك أثراً، وتضييقه لا يترك.
+    //
+    // ‏`Permissions.AllBranches` يقول عن نفسه: «تنفيذ أي استعلام به يُسجَّل صراحة في
+    // التدقيق». وقراءة قائمة الفروع بالنطاق الواسع **استعمالٌ له**، فغياب الأثر كان
+    // يجعل القاعدة صادقة على مسار القيود وحده وكاذبة هنا.
+    //
+    // **والنصف السالب جزء من الدعوى لا زينة:** من يضيق نطاقه إلى فروعه المخصَّصة
+    // لم يستعمل الصلاحية الواسعة، فأثرٌ باسمه كذبٌ على السجل — وسجلٌّ يوثّق ما لم
+    // يقع أسوأ من سجلٍّ ناقص
+    [Fact]
+    public async Task K28_ListBranches_RecordsAccessOnlyWhenAllBranchesScopeIsUsed()
+    {
+        var identity = await NewIdentityAsync();
+
+        await IdentityScenarioBuilder.GrantAsync(
+            Database, identity.BranchRoleId, [Permissions.MasterDataRead], identity.Company.UserId);
+
+        var (scopedToken, _) = await LoginAsync(identity.BranchUserName);
+        var (broadToken, _) = await LoginAsync(identity.AdminUserName);
+
+        (await AuthClient.GetAsync(Client, MasterDataClient.BranchesPath, scopedToken))
+            .EnsureSuccessStatusCode();
+        (await AuthClient.GetAsync(Client, MasterDataClient.BranchesPath, broadToken))
+            .EnsureSuccessStatusCode();
+
+        var scopedRows = await AuditClient.ReadAsync(
+            Database, entityName: nameof(Branch), userId: identity.BranchUserId);
+
+        var broadRows = await AuditClient.ReadAsync(
+            Database, entityName: nameof(Branch), userId: identity.AdminUserId);
+
+        // النصف السالب: تضييق النطاق ليس استعمالاً للصلاحية الواسعة
+        Assert.Empty(scopedRows);
+
+        // والنصف الموجب: قراءة واحدة بالنطاق الشامل ⟵ سطر واحد لا أكثر ولا أقل
+        var row = Assert.Single(broadRows);
+
+        Assert.Equal(AuditClient.QueryAllBranches, row.Action);
+        Assert.Equal(nameof(Branch), row.EntityName);
+        Assert.Equal(AuditActions.AllScope, row.EntityKey);
     }
 
     // K15
