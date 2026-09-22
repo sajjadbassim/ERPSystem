@@ -85,7 +85,7 @@ public class UserService : IUserService
         }
     }
 
-    public async Task EnsureAllBranchesScopeAsync(CancellationToken ct = default)
+    public async Task<Guid> EnsureAllBranchesScopeAsync(CancellationToken ct = default)
     {
         var context = await GetValidatedContextAsync(ct);
 
@@ -95,9 +95,18 @@ public class UserService : IUserService
             throw new ForbiddenException(AuthMessages.BranchOutOfScope);
         }
 
+        // مستخدم بلا شركة خارج كل نطاق — نفس حكم EnsureBranchAccessAsync على الحالة نفسها.
+        // لا يبلغه اليوم إلا الجذر، وهو معطَّل فيسقط قبله في GetValidatedContextAsync
+        if (context.User.CompanyId is not { } companyId)
+        {
+            throw new ForbiddenException(AuthMessages.BranchOutOfScope);
+        }
+
         // النجمة تعني «كل فروع شركته»، وهو النطاق الفعلي — فحدّ الشركة لا يُتجاوز
         await _auditService.RecordAccessAsync(
             AuditActions.QueryAllBranches, nameof(Branch), AuditActions.AllScope, ct);
+
+        return companyId;
     }
 
     public async Task<IReadOnlyList<string>> GetPermissionsAsync(CancellationToken ct = default)

@@ -26,8 +26,13 @@ public interface IUserService
     Task EnsureBranchAccessAsync(Guid branchId, CancellationToken ct = default);
 
     // الاستعلام بلا فرع محدَّد. غياب المرشِّح ليس تخفيفاً بل أوسع نطاق ممكن،
-    // فيتطلب الصلاحية الشاملة ويترك أثراً في كل مرة (الحارسان G05 و J18)
-    Task EnsureAllBranchesScopeAsync(CancellationToken ct = default);
+    // فيتطلب الصلاحية الشاملة ويترك أثراً في كل مرة (الحارسان G05 و J18).
+    //
+    // **تُرجع معرّف شركة الفاعل، ولا تُسقطه.** «النطاق الشامل» يعني كل فروع شركته
+    // لا كل فروع النظام، وذلك الحدّ **بيانٌ يجب أن يبلغ الاستعلام** لا نيّةٌ تُوصف في
+    // تعليق: المستدعي لا يملك مصدراً آخر له، فإسقاطه هنا كان يترك الاستعلام بلا مرشِّح
+    // شركة فيقرأ دفاتر كل الشركات (الحارس G10)
+    Task<Guid> EnsureAllBranchesScopeAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<string>> GetPermissionsAsync(CancellationToken ct = default);
 

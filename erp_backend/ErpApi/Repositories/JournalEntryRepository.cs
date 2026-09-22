@@ -22,24 +22,37 @@ public class JournalEntryRepository : IJournalEntryRepository
             .FirstOrDefaultAsync(e => e.Id == id, ct);
 
     public Task<List<JournalEntry>> GetPagedByBranchAsync(
-        Guid? branchId, PaginationParams pagination, CancellationToken ct = default) =>
-        Filter(branchId)
+        Guid? branchId, Guid? scopedCompanyId, PaginationParams pagination,
+        CancellationToken ct = default) =>
+        Filter(branchId, scopedCompanyId)
             .OrderByDescending(e => e.PostingDate)
             .ThenBy(e => e.Id)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .ToListAsync(ct);
 
-    public Task<int> CountByBranchAsync(Guid? branchId, CancellationToken ct = default) =>
-        Filter(branchId).CountAsync(ct);
+    public Task<int> CountByBranchAsync(
+        Guid? branchId, Guid? scopedCompanyId, CancellationToken ct = default) =>
+        Filter(branchId, scopedCompanyId).CountAsync(ct);
 
     public Task<int> CountLinesAsync(Guid journalEntryId, CancellationToken ct = default) =>
         _context.JournalLines.AsNoTracking().CountAsync(l => l.JournalEntryId == journalEntryId, ct);
 
-    private IQueryable<JournalEntry> Filter(Guid? branchId)
+    private IQueryable<JournalEntry> Filter(Guid? branchId, Guid? scopedCompanyId)
     {
         var query = _context.JournalEntries.AsNoTracking();
 
-        return branchId is { } id ? query.Where(e => e.BranchId == id) : query;
+        // فرع محدَّد: حدّ الشركة مفروض قبل بلوغ هذه النقطة في EnsureBranchAccessAsync
+        if (branchId is { } id)
+        {
+            return query.Where(e => e.BranchId == id);
+        }
+
+        // بلا فرع: النطاق شركة الفاعل لا النظام. و`JournalEntry` بلا CompanyId فالحدّ
+        // يُبلَغ عبر الفرع وحده، والعلاقة إلزامية فيولّد EF انضماماً داخلياً.
+        //
+        // ونطاق فارغ يُرجع صفر صفوف لا كل الصفوف: مقارنة عمود غير قابل للعدم بـNULL
+        // تُنتج UNKNOWN فلا يعبر صف — **فشل مغلق بحكم الدلالة لا بحكم التذكّر**
+        return query.Where(e => e.Branch.CompanyId == scopedCompanyId);
     }
 }

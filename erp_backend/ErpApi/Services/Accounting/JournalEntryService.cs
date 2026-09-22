@@ -33,21 +33,27 @@ public class JournalEntryService : IJournalEntryService
     {
         await _userService.EnsurePermissionAsync(Permissions.JournalEntryRead, ct);
 
+        // النطاق يُحمل من الفحص إلى الاستعلام، ولا يُسقط بينهما: «كل الفروع» تعني كل
+        // فروع شركة الفاعل، وبلا تمرير معرّفها يقرأ حاملُ النطاق الشامل دفاتر كل
+        // شركات النظام بـ200 سليمة (الحارس G10)
+        Guid? scopedCompanyId = null;
+
         if (branchId is { } id)
         {
             await _userService.EnsureBranchAccessAsync(id, ct);
         }
         else
         {
-            await _userService.EnsureAllBranchesScopeAsync(ct);
+            scopedCompanyId = await _userService.EnsureAllBranchesScopeAsync(ct);
         }
 
-        var items = await _entryRepository.GetPagedByBranchAsync(branchId, pagination, ct);
+        var items = await _entryRepository.GetPagedByBranchAsync(
+            branchId, scopedCompanyId, pagination, ct);
 
         return new PagedResponse<JournalEntryListItemDto>
         {
             Data = [.. items.Select(MapListItem)],
-            TotalCount = await _entryRepository.CountByBranchAsync(branchId, ct),
+            TotalCount = await _entryRepository.CountByBranchAsync(branchId, scopedCompanyId, ct),
             PageNumber = pagination.PageNumber,
             PageSize = pagination.PageSize
         };

@@ -36,6 +36,56 @@ public class JournalReadApiTests(TestDatabase database) : IdentityTestBase(datab
         Assert.Contains(items, e => AccountingClient.Field(e, "id") == entryId.ToString());
     }
 
+    // G10 — النطاق الشامل **بلا مرشِّح فرع** لا يعبر حدود الشركة.
+    //
+    // ‏`G08` يقيس المسار الذي يمرّر `branchId` صريحاً، فيحرسه `EnsureBranchAccessAsync`
+    // بفحص شركة قائم. وهذا يقيس المسار الآخر — الذي **لا `branchId` فيه أصلاً** —
+    // وكان بلا حارس: `EnsureAllBranchesScopeAsync` تفحص الصلاحية وتكتب أثر التدقيق
+    // ولا تحدّ الشركة، فيقرأ حاملُ `AllBranches` دفاتر كل شركات النظام.
+    //
+    // والتأكيد على **المحتوى** لا على رمز الحالة: التسريب يخرج بـ 200 سليمة
+    [Fact]
+    public async Task G10_AllBranchesScope_WithNoBranchFilter_ExcludesOtherCompanyEntries()
+    {
+        var identity = await NewIdentityAsync();
+        var ownEntryId = await PostOneAsync(identity);
+
+        // شركة ثانية كاملة بقيد مرحَّل فيها — نمط `G08` نفسه، وبلا مستخدمين فيها:
+        // الفاعل يبقى واحداً، والسؤال هل تبلغه صفوفُها
+        var otherCompany = await ScenarioBuilder.CreateAsync(Database);
+        var otherEntry = otherCompany.NewPost(
+            otherCompany.Debit(otherCompany.CashAccountId, 750m),
+            otherCompany.Credit(otherCompany.RevenueAccountId, 750m));
+
+        await PostingClient.PostAsync(Database, otherEntry);
+
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.GetAsync(Client, AccountingClient.JournalEntriesPath, accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var items = await AccountingClient.ReadItemsAsync(response);
+        var ids = items.Select(item => AccountingClient.Field(item, "id")).ToList();
+
+        Assert.Contains(ownEntryId.ToString(), ids);
+        Assert.DoesNotContain(otherEntry.JournalEntryId.ToString(), ids);
+
+        // ولا عنصر واحد من خارج فروع شركة الفاعل — أقوى من نفي معرّف بعينه:
+        // يلتقط تسرّب **أي** شركة أخرى بذرها اختبار آخر في التشغيلة نفسها
+        var ownBranches = new[]
+        {
+            identity.Company.BranchId.ToString(),
+            identity.Company.SecondBranchId.ToString(),
+            identity.Company.BranchWithoutSequenceId.ToString()
+        };
+
+        foreach (var item in items)
+        {
+            Assert.Contains(AccountingClient.Field(item, "branchId"), ownBranches);
+        }
+    }
+
     // L30 — قراءة قيد واحد تُرجع سطوره. رأس بلا سطور ليس قيداً (R-TRC-03-a)
     [Fact]
     public async Task L30_ReadEntryById_ReturnsItsLines()
