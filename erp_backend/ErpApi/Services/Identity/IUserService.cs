@@ -2,6 +2,15 @@ using ErpApi.Core.Models;
 
 namespace ErpApi.Services.Identity;
 
+// نطاق قراءة الفروع للفاعل الحالي — **وصفٌ لا بوّابة**.
+//
+// ‏`HasAllBranches` يوسّع النطاق من «فروعي المخصَّصة» إلى «كل فروع شركتي»،
+// ‏**ولا يتجاوز `CompanyId` بحال**. فالحدّان مستقلان يُطبَّقان معاً لا أحدهما.
+//
+// و`UserId` هنا لا زيادة: هو ما يُرشَّح به جدول الربط حين يضيق النطاق، وقراءته
+// من نداء ثانٍ كانت ستضرب القاعدة مرتين لسؤال واحد
+public sealed record BranchScope(Guid UserId, Guid CompanyId, bool HasAllBranches);
+
 // الجلسة الموثَّقة بعد فحص القاعدة، لا ما تدّعيه المطالبات وحدها
 public sealed class UserContext
 {
@@ -33,6 +42,14 @@ public interface IUserService
     // تعليق: المستدعي لا يملك مصدراً آخر له، فإسقاطه هنا كان يترك الاستعلام بلا مرشِّح
     // شركة فيقرأ دفاتر كل الشركات (الحارس G10)
     Task<Guid> EnsureAllBranchesScopeAsync(CancellationToken ct = default);
+
+    // **استفهام لا بوّابة** — وهذا ما يميّزه عن `EnsureAllBranchesScopeAsync` ويمنع
+    // إعادة استعماله مكانه. تلك تَأذن أو تمنع، فتفشل مغلقة بلا `AllBranches`؛
+    // وهذه تصف النطاق ليُبنى عليه مرشِّح، فغياب `AllBranches` عندها **نتيجة لا رفض**:
+    // يضيق النطاق إلى الفروع المخصَّصة ولا يُردّ الطلب.
+    //
+    // ولا تكتب أثر تدقيق: لا قرار وصول يقع هنا، والأثر يُكتب حيث يقع القرار (§4.2)
+    Task<BranchScope> GetBranchScopeAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<string>> GetPermissionsAsync(CancellationToken ct = default);
 

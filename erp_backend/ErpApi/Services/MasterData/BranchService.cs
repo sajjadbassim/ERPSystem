@@ -36,12 +36,19 @@ public class BranchService : IBranchService
     {
         await _userService.EnsurePermissionAsync(Permissions.MasterDataRead, ct);
 
-        var items = await _branchRepository.GetPagedAsync(pagination, ct);
+        // الصلاحية تأذن بالقراءة ولا تحدّ المقروء، فالنطاق يُقرأ بعدها ويُمرَّر إلى
+        // الاستعلام: شركة الفاعل حدّاً أول، وفروعه المخصَّصة حدّاً ثانياً يسقط وحده
+        // عمّن يحمل AllBranches (الحارسان K25 و K26)
+        var scope = await _userService.GetBranchScopeAsync(ct);
+        var scopedUserId = scope.HasAllBranches ? (Guid?)null : scope.UserId;
+
+        var items = await _branchRepository.GetPagedAsync(
+            scope.CompanyId, scopedUserId, pagination, ct);
 
         return new PagedResponse<BranchResponseDto>
         {
             Data = [.. items.Select(Map)],
-            TotalCount = await _branchRepository.CountAsync(ct),
+            TotalCount = await _branchRepository.CountAsync(scope.CompanyId, scopedUserId, ct),
             PageNumber = pagination.PageNumber,
             PageSize = pagination.PageSize
         };

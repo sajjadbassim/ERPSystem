@@ -109,6 +109,20 @@ public class UserService : IUserService
         return companyId;
     }
 
+    public async Task<BranchScope> GetBranchScopeAsync(CancellationToken ct = default)
+    {
+        var context = await GetValidatedContextAsync(ct);
+
+        // مستخدم بلا شركة خارج كل نطاق — نفس حكم EnsureBranchAccessAsync عليه.
+        // وهذا **ليس** فشلاً مغلقاً أمام غياب AllBranches: ذاك يضيّق النطاق ولا يرفض
+        if (context.User.CompanyId is not { } companyId)
+        {
+            throw new ForbiddenException(AuthMessages.BranchOutOfScope);
+        }
+
+        return new BranchScope(context.User.Id, companyId, context.Has(Permissions.AllBranches));
+    }
+
     public async Task<IReadOnlyList<string>> GetPermissionsAsync(CancellationToken ct = default)
     {
         var context = await GetValidatedContextAsync(ct);
