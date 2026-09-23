@@ -77,10 +77,15 @@ export function CurrencySourceProvider(props: CurrencySourceProviderProps) {
   //
   // ‏وثمنه معلَن: أثناء الفشل تبقى المبالغ نقاطاً. وعرض سبب الفشل شأن الشاشة
   // المستضيفة لا شأن السجل — ولا شاشة كهذه اليوم.
+  //
+  // ‏**وقد ظهرت تلك الشاشة (2026-09-23): `<CurrencyPicker>`.** فصار الخطأ يُمرَّر
+  // ‏**بجانب** الحالة لا بداخلها: `status` يبقى ثنائياً كما هو — فلا `C01`–`C06`
+  // تتغيّر بحرف — و`error` يبلغ من يستطيع شرحه. يحرسه `CUR11` و`CUR12`.
   return (
     <CurrencyRegistryStateProvider
       status={query.isSuccess ? "ready" : "loading"}
-      currencies={query.data ?? EMPTY}>
+      currencies={query.data ?? EMPTY}
+      error={query.error}>
       {props.children}
     </CurrencyRegistryStateProvider>
   );
