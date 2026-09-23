@@ -253,4 +253,42 @@ describe("AccountPicker — S (منتقي الحساب، بمعزل عن أي ن
     // ‏`null` لا `undefined` ولا `""`: المستهلك يفرّق «لا اختيار» عن «لم يُحمَّل بعد»
     expect(onChange).toHaveBeenCalledWith(null);
   });
+
+  // ‏🔒 `S10` محجوزة — سقف `MAX_PAGES` في `useAllAccounts`، فرعٌ بلا حارس مسجَّل في
+  // «الديون المقترَحة غير المغلَقة». لا تُكتب ولا يُعاد استعمال رقمها
+
+  // ‏**الحمرة بالأسماء — جسم غير منفَّذ.** `S11` تسدّ تبايناً مقيساً لا تضيف ميزة:
+  // ‏`useAllAccounts` يُرجع `error`، و`AccountPicker.tsx` يفكّك `status` و`accounts`
+  // ‏**ويُسقطه** — فيصير الفشل «لا نتائج مطابقة.» على الشاشة، وهو نمط الفشل المفتوح
+  // الذي وُجدت `Q06` لمنعه نصّاً. نظيرها `A05` في `<AccountsScreen>`، و«5xx حصراً»
+  // للسبب نفسه المكتوب هناك
+  it("S11: فشل الجلب (5xx) ⟵ رسالة الخادم ورقمه، لا «لا نتائج مطابقة»", async () => {
+    // ‏**503 لا 401** — قرار الدَّين ٦ يقصر الرقم على أعطال الخادم، و`T02` يحرس
+    // حجبه في 4xx. والثابتان نفسا `A05` حرفياً لأن `traceIdToShow` يُرجع `null` إن
+    // كانت الرسالة تحوي الرقم أصلاً (`api-error.ts:93`)
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        json: async () => ({
+          success: false,
+          message: "الخدمة غير متاحة مؤقتاً.",
+          data: null,
+          traceId: "0HNOF2DK5ILLO:00000001"
+        })
+      }))
+    );
+
+    const input = renderPicker(null, vi.fn());
+
+    expect(await screen.findByText("الخدمة غير متاحة مؤقتاً.")).not.toBeNull();
+    expect(screen.getByText(/0HNOF2DK5ILLO:00000001/u)).not.toBeNull();
+
+    // ‏والادعاء الثاني: الخطأ **لا يُبتلع** في «لا نتائج مطابقة.» — وهو التباين
+    // المقيس الذي وُجدت هذه الحالة لسدّه
+    openPopup(input);
+
+    await waitFor(() => expect(screen.queryByText("لا نتائج مطابقة.")).toBeNull());
+  });
 });

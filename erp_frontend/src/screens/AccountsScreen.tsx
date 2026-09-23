@@ -1,6 +1,6 @@
-import { ApiError, traceIdToShow } from "../api/api-error";
 import { useAllAccounts } from "../api/useAllAccounts";
 import type { AccountItem } from "../api/useAccounts";
+import { ApiErrorMessage } from "../components/ApiErrorMessage";
 import { DataGrid } from "../components/data-grid/DataGrid";
 import type { GridColumn } from "../components/data-grid/DataGrid";
 import { useCurrencyLookup } from "../currency/currency-registry";
@@ -73,21 +73,6 @@ function CurrencyCell({ currencyId }: { currencyId: string | null }) {
   return <span>{currency === undefined ? "غير معروفة" : currency.code}</span>;
 }
 
-// ‏عرض الفشل: الرسالة، ورقم التتبّع **إن كان عطل خادم** (قرار الدَّين ٦). وثالث
-// مستهلك لهذه القاعدة — والقاعدة نفسها مستخرَجة في `traceIdToShow`، والمتبقّي شكل
-// لا منطق. ويُعاد النظر في استخراجه مكوّناً مشتركاً إن ظهر رابع
-function AccountsError({ error }: { error: Error }) {
-  const failure = error instanceof ApiError ? error.failure : null;
-  const traceId = failure === null ? null : traceIdToShow(failure);
-
-  return (
-    <p role="alert">
-      {error.message}
-      {traceId === null ? null : <span>{` رقم التتبّع: ${traceId}`}</span>}
-    </p>
-  );
-}
-
 export function AccountsScreen() {
   const { status, accounts, error } = useAllAccounts();
 
@@ -102,7 +87,7 @@ export function AccountsScreen() {
 
       {/* ‏والخطأ لا يُبتلع في «لا حسابات»: انقطاع الخادم كان سيبدو شجرة فارغة —
           وهو الفشل المفتوح الذي وُجدت `Q06` له. يحرسه `A05` */}
-      {status === "error" && error !== null ? <AccountsError error={error} /> : null}
+      {status === "error" && error !== null ? <ApiErrorMessage error={error} /> : null}
 
       {status === "success" ? (
         <DataGrid rows={accounts} columns={COLUMNS} emptyMessage="لا حسابات مسجَّلة." />
