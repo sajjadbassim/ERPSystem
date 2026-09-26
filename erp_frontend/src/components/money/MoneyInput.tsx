@@ -1,11 +1,16 @@
+import { useId } from "react";
 import Big from "big.js";
 
-import { useCurrencies } from "../../currency/currency-registry";
+import { useCurrencyLookup } from "../../currency/currency-registry";
+
+// ‏الجانب يقرّر **أين** يوضع المبلغ عند التجميع خارج المكوّن (`debitFC` أو `creditFC`)،
+// ولا يمسّ المبلغ نفسه: توزيع لا حساب (R-API-01)
+export type MoneyInputSide = "debit" | "credit";
 
 export type MoneyInputValue = {
   // ‏نصّ كما يُرسل على السلك، بلا `Number` (R-API-03)
   amountFC: string;
-  currencyId: string;
+  side: MoneyInputSide;
   exchangeRate: string;
   exchangeRateDate: string;
 };
@@ -13,12 +18,20 @@ export type MoneyInputValue = {
 export type MoneyInputProps = {
   value: MoneyInputValue;
 
-  // ‏`null` ⟵ الحساب غير مقيَّد بعملة (`Account.CurrencyId IS NULL`)، فالاختيار حرّ.
-  // وغير ذلك تُفرض عملة الحساب — وإلا ردّ الخادم الخطأ 50011
-  accountCurrencyId: string | null;
+  // ‏خاصية عرض لا جزء من القيمة: العملة يقرّرها المستضيف (عملة الحساب أو اختيار
+  // المستخدم في منتقٍ خارجي)، ونسخة ثانية منها في القيمة مصدرٌ ثانٍ لحقيقة واحدة
+  // (R-CUR-03). والمعرّف لا الرمز، كما في `<MoneyDisplay>`: ليبقى فرعا «لم يُحمَّل»
+  // و«مجهولة» حارسين حقيقيين داخل المكوّن
+  currencyId: string;
+
+  // ‏المكوّن ينفّذ القفل ولا يعرف سببه: متى تكون العملة عملة الدفاتر (50012) قرار
+  // سياق شركة يملكه نموذج القيد (`V08`)
+  isRateLocked: boolean;
 
   onChange: (next: MoneyInputValue) => void;
 };
+
+const LOCKED_RATE = "1";
 
 // ‏موجب حصراً — الخادم يفرضه بـ50014 على المبلغ و50020 على السعر. وكل ما ليس عشرياً
 // موجباً يسقط في الشرط نفسه: الفارغ والمشوَّه والصفر والسالب. **شرط موجب واحد** بدل
@@ -35,11 +48,13 @@ function isPositive(amount: string): boolean {
 }
 
 export function MoneyInput(props: MoneyInputProps) {
-  const currencies = useCurrencies();
+  const id = useId();
+  const { isReady, currency } = useCurrencyLookup(props.currencyId);
 
-  // ‏القفل من **قيد الحساب** لا من العملة الحالية: حساب صندوق الدولار لا يقبل حركة
-  // بغير عملته (R-PAY: الحسابات النقدية أحادية العملة)، والخادم يردّها بـ50011
-  const isCurrencyLocked = props.accountCurrencyId !== null;
+  // ‏R-UI-02 وR-RPT-06: مبلغ لا تُعرف عملته لا يُدخَل كما لا يُعرض
+  const isAmountEnabled = isReady && currency !== undefined;
+
+  const exchangeRate = props.isRateLocked ? LOCKED_RATE : props.value.exchangeRate;
 
   // ‏R-API-05: هذا تحقق **للتجربة وحدها**، والمعتبر ما يفرضه الخادم. غرضه أن يرى
   // المستخدم الخطأ قبل رحلة ذهاب وإياب، لا أن يحلّ محلّ الفحص المعتبر
@@ -49,54 +64,73 @@ export function MoneyInput(props: MoneyInputProps) {
     messages.push("المبلغ يجب أن يكون موجباً.");
   }
 
-  if (!isPositive(props.value.exchangeRate)) {
+  if (!isPositive(exchangeRate)) {
     messages.push("سعر الصرف يجب أن يكون موجباً.");
   }
 
   // ‏يُصدر ما أُدخل حرفياً: لا تقريب ولا بتر (R-AMT-07 — التقريب عند العرض وحده).
   // والعمود في القاعدة `DECIMAL(19,4)` مهما كانت خانات العملة، فتقريب المُدخَل
-  // يغيّر **قيمة مالية** لا صورة عرض
+  // يغيّر **قيمة مالية** لا صورة عرض.
+  //
+  // ‏والسعر المقفل يُفرض **في كل إصدار** لا في العرض وحده، فلا تتسرّب قيمة واردة بسعر
+  // آخر عبر تعديل حقل غيره (`V16`)
   const emit = (patch: Partial<MoneyInputValue>) => {
-    props.onChange({ ...props.value, ...patch });
+    props.onChange({ ...props.value, ...patch, exchangeRate: patch.exchangeRate ?? exchangeRate });
   };
 
   return (
     <div>
-      <label htmlFor="money-input-amount">المبلغ</label>
+      {/* ‏R-UI-02: العملة ملازمة للمبلغ ومربوطة به. والحراسة في المعالج لا في
+          `disabled` وحده: الحدث يصل الحقل المعطَّل برمجياً (`V18`, `V19`) */}
+      <label htmlFor={`${id}-amount`}>المبلغ</label>
       <input
-        id="money-input-amount"
+        id={`${id}-amount`}
         value={props.value.amountFC}
-        onChange={(event) => emit({ amountFC: event.target.value })}
+        disabled={!isAmountEnabled}
+        aria-describedby={`${id}-currency`}
+        onChange={(event) => {
+          if (isAmountEnabled) {
+            emit({ amountFC: event.target.value });
+          }
+        }}
       />
+      {!isReady ? (
+        <span id={`${id}-currency`} aria-busy="true">…</span>
+      ) : currency === undefined ? (
+        <span id={`${id}-currency`} role="alert">تعذّر إدخال المبلغ: عملته غير معروفة.</span>
+      ) : (
+        // ‏R-RPT-04: الرمز من السجل لا ثابتاً في الكود، ويسقط إلى الكود عند غيابه
+        <span id={`${id}-currency`}>{currency.symbol ?? currency.code}</span>
+      )}
 
-      {/* ‏R-UI-02: العملة ملازمة للمبلغ في الحقل نفسه. حقل رقم عارٍ هو الرقم المجرد
-          الممنوع بعينه، وإن كانت العملة محفوظة في الحالة دون أن تُقرأ */}
-      <label htmlFor="money-input-currency">العملة</label>
+      <label htmlFor={`${id}-side`}>الجانب</label>
       <select
-        id="money-input-currency"
-        value={props.value.currencyId}
-        disabled={isCurrencyLocked}
-        onChange={(event) => emit({ currencyId: event.target.value })}
+        id={`${id}-side`}
+        value={props.value.side}
+        onChange={(event) => emit({ side: event.target.value as MoneyInputSide })}
       >
-        {currencies.map((currency) => (
-          <option key={currency.id} value={currency.id}>
-            {currency.symbol ?? currency.code}
-          </option>
-        ))}
+        <option value="debit">مدين</option>
+        <option value="credit">دائن</option>
       </select>
 
       {/* ‏يُدخل يدوياً ولا يُشتق: لا نقطة بحث بالعملتين والتاريخ في العقد، واختيار
-          السعر المنطبق قرار مالي تمنعه R-API-01. والتجاوز اليدوي مسنود بـR-FX-06 */}
-      <label htmlFor="money-input-rate">سعر الصرف</label>
+          السعر المنطبق قرار مالي تمنعه R-API-01. والتجاوز اليدوي مسنود بـR-FX-06.
+          والقفل في المعالج لا في `disabled` وحده (`V17`) */}
+      <label htmlFor={`${id}-rate`}>سعر الصرف</label>
       <input
-        id="money-input-rate"
-        value={props.value.exchangeRate}
-        onChange={(event) => emit({ exchangeRate: event.target.value })}
+        id={`${id}-rate`}
+        value={exchangeRate}
+        disabled={props.isRateLocked}
+        onChange={(event) => {
+          if (!props.isRateLocked) {
+            emit({ exchangeRate: event.target.value });
+          }
+        }}
       />
 
-      <label htmlFor="money-input-rate-date">تاريخ سعر الصرف</label>
+      <label htmlFor={`${id}-rate-date`}>تاريخ سعر الصرف</label>
       <input
-        id="money-input-rate-date"
+        id={`${id}-rate-date`}
         type="date"
         value={props.value.exchangeRateDate}
         onChange={(event) => emit({ exchangeRateDate: event.target.value })}

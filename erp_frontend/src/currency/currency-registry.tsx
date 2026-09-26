@@ -89,11 +89,6 @@ export function useCurrencyLookup(currencyId: string): CurrencyLookup {
   };
 }
 
-// ‏القائمة كلها — يحتاجها مَن يعرض خيارات لا مَن يعرض مبلغاً واحداً
-export function useCurrencies(): readonly RegisteredCurrency[] {
-  return (useContext(CurrencyRegistryContext) ?? ABSENT).currencies;
-}
-
 export type CurrencyRegistry = {
   isReady: boolean;
   currencies: readonly RegisteredCurrency[];
@@ -101,11 +96,6 @@ export type CurrencyRegistry = {
 };
 
 // ‏القائمة **مع حالتها** — لمن عليه أن يشرح الفشل لا أن يعرض ما وصل فقط.
-//
-// ‏ولا يحلّ محلّ `useCurrencies()`: ذاك إسقاطٌ أضيق يكفي `<MoneyInput>` (`V01`–`V12`)،
-// وتوسيعه كان سيغيّر عقداً ملتزَماً بلا اختبار يطلب ذلك — نظير قرار فصل
-// ‏`useAllAccounts` عن `useAccounts` حرفياً. **والمصدر واحد في الحالتين** (السياق
-// نفسه)، فلا مصدر حقيقة ثانٍ ينشأ (R-CUR-03).
 export function useCurrencyRegistry(): CurrencyRegistry {
   const registry = useContext(CurrencyRegistryContext) ?? ABSENT;
 
