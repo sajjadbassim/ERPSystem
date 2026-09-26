@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { SubmitButton, TextField, ZodForm } from "./ZodForm";
+import { ControlledField, SubmitButton, TextField, ZodForm } from "./ZodForm";
 import { branchCreateSchema } from "../schemas/branch-schema";
 
 // ‏مصفوفة الحالات F (النموذج العام).
@@ -154,5 +154,64 @@ describe("ZodForm — F (النموذج العام، أول مستهلك: إنش
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
 
     release();
+  });
+});
+
+// ‏مكوّن متحكَّم به بأبسط عقد (`value`/`onChange`) — نظير `<BranchPicker>` بلا شبكة.
+// والمخطط نفسه `branchCreateSchema`، فلا مخطط اختبار موازٍ
+function CompanyChoice(props: { value: string; onChange: (next: string) => void }) {
+  return (
+    <p>
+      <span>{`المختار: ${props.value === "" ? "لا شيء" : props.value}`}</span>
+      <button type="button" onClick={() => props.onChange(VALID_COMPANY_ID)}>
+        اختر الشركة
+      </button>
+    </p>
+  );
+}
+
+function renderControlledForm(onSubmit: (values: unknown) => void, companyId = "") {
+  render(
+    <ZodForm schema={branchCreateSchema} defaultValues={{ ...EMPTY, companyId }} onSubmit={onSubmit}>
+      <ControlledField<string> name="companyId" render={(field) => <CompanyChoice {...field} />} />
+      <TextField name="code" label={LABELS.code} />
+      <TextField name="name" label={LABELS.name} />
+      <SubmitButton>حفظ</SubmitButton>
+    </ZodForm>
+  );
+}
+
+describe("ControlledField — F (جسر المكوّنات المتحكَّم بها)", () => {
+  it("F07: قيمة يُصدرها المكوّن تبلغ الإرسال حرفياً", async () => {
+    const onSubmit = vi.fn();
+    renderControlledForm(onSubmit);
+
+    fireEvent.click(screen.getByRole("button", { name: "اختر الشركة" }));
+    fill({ code: "BR1", name: "الفرع الرئيسي" });
+    submit();
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+
+    expect(onSubmit).toHaveBeenCalledWith({ companyId: VALID_COMPANY_ID, code: "BR1", name: "الفرع الرئيسي" });
+  });
+
+  // ‏الاتجاه المعاكس لـ`F07`: جسرٌ يكتب ولا يقرأ يمرّ منها ويعرض المكوّن فارغاً أبداً
+  it("F08: القيمة الابتدائية تبلغ المكوّن", () => {
+    renderControlledForm(vi.fn(), VALID_COMPANY_ID);
+
+    expect(screen.getByText(`المختار: ${VALID_COMPANY_ID}`)).toBeInTheDocument();
+  });
+
+  it("F09: خطأ المخطط على الحقل المتحكَّم به يُعرض ولا يُبلع، والإرسال محجوب", async () => {
+    const onSubmit = vi.fn();
+    renderControlledForm(onSubmit);
+
+    fill({ code: "BR1", name: "الفرع الرئيسي" });
+    submit();
+
+    // ‏الشظية «الشركة» لا تظهر إلا في رسالة `companyId` — فالحقلان الآخران صالحان
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/الشركة/u));
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

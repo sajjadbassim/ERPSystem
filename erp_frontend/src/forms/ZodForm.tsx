@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { FormProvider, useForm, useFormContext } from "react-hook-form";
+import { Controller, FormProvider, useForm, useFormContext } from "react-hook-form";
 import type { DefaultValues, FieldValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
@@ -79,6 +79,41 @@ export function TextField(props: TextFieldProps) {
         </span>
       )}
     </p>
+  );
+}
+
+export type ControlledFieldProps<TValue> = {
+  name: string;
+
+  // ‏عقد المكوّن المتحكَّم به كما هو في المشروع (`value`/`onChange` في `<BranchPicker>`
+  // ‏و`<MoneyInput>`)، لا `field` الخاصّ بـRHF: فلا تتسرّب `ref` ولا `onBlur` ولا `name`
+  // إلى مكوّن لا يعرفها
+  render: (field: { value: TValue; onChange: (next: TValue) => void }) => ReactNode;
+};
+
+// ‏الجسر لما لا يُسجَّل بـ`register`: `register` يربط عنصر DOM أصلياً، والمكوّن
+// المتحكَّم به (MUI `Autocomplete` خلف `<BranchPicker>`) لا يعرض عنصراً يُربط.
+// ‏`TextField` و`SubmitButton` كما هما.
+//
+// ‏و`TValue` **إعلان المستهلك لا فحصٌ**: القيمة تأتي من حالة النموذج، ومطابقتها
+// للمخطط يحرسها المخطط عند الإرسال
+export function ControlledField<TValue>(props: ControlledFieldProps<TValue>) {
+  const { control } = useFormContext();
+
+  return (
+    <Controller
+      name={props.name}
+      control={control}
+      render={({ field, fieldState }) => (
+        <>
+          {/* ‏لفٌّ بوسيط واحد — درس `F01`: `field.onChange` يقبل حدثاً أيضاً، فتمريره
+              مباشرةً يترك للمكوّن أن يكتب في النموذج ما ليس قيمة */}
+          {props.render({ value: field.value as TValue, onChange: (next) => field.onChange(next) })}
+
+          {fieldState.error?.message === undefined ? null : <span role="alert">{fieldState.error.message}</span>}
+        </>
+      )}
+    />
   );
 }
 
