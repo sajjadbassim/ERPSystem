@@ -15,6 +15,12 @@ export type UseCompanyResult = {
   error: Error | null;
 };
 
+// ‏المفتاح في موضع واحد: يقرؤه `useCompany` ويقرؤه حدّ الإرسال من الذاكرة نفسها،
+// فيُرسَل القفل على ما تعرضه الشاشة لا على جلبٍ ثانٍ قد يسبقها
+export function companyQueryKey(companyId: string | null) {
+  return ["companies", companyId] as const;
+}
+
 async function fetchCompany(companyId: string): Promise<CompanyItem> {
   const response = await apiFetch(`/api/companies/${encodeURIComponent(companyId)}`);
 
@@ -40,7 +46,7 @@ export function useCompany(companyId: string | null): UseCompanyResult {
   const { status } = useAuth();
 
   const query = useQuery({
-    queryKey: ["companies", companyId],
+    queryKey: companyQueryKey(companyId),
     queryFn: companyId === null ? skipToken : () => fetchCompany(companyId),
     enabled: status === "authenticated",
 

@@ -83,10 +83,36 @@ function page(data: unknown[]) {
   return { success: true, data: { data, hasNextPage: false } };
 }
 
-function stubApi(options: { companyFault?: boolean } = {}) {
-  const fetchMock = vi.fn(async (input: unknown) => {
+type StubResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
+
+// ‏نصّان **لا تؤلّفهما الواجهة** — رسالة الإجراء في 50001 بحرفها، ورسالة المتحكّم عند
+// النجاح بحرفها (`JournalEntriesController.cs:43`). فظهورهما على الشاشة لا يكون إلا نقلاً
+const REJECTION = "القيد غير متوازن. كل سطوره بعملة الدفاتر فلا مجال لباقي تقريب.";
+const POSTED = "تم ترحيل القيد بنجاح";
+const DOCUMENT_NUMBER = "JV-BR01-2026-000017";
+
+// ‏201 لا 200: المتحكّم يُرجع `CreatedAtAction` — و`openapi.json` يُعلن 200 (انحراف عقد
+// مسجَّل). فالتثبيت على الواقع لا على العقد، والواجهة تفحص `ok` لا رمزاً بعينه
+function postedResponse(): StubResponse {
+  return {
+    ok: true,
+    status: 201,
+    json: async () => ({ success: true, message: POSTED, data: { id: "0199a1f0-0000-7000-8000-00000000f001", documentNumber: DOCUMENT_NUMBER }, traceId: null })
+  };
+}
+
+function rejectedResponse(): StubResponse {
+  return { ok: false, status: 400, json: async () => ({ success: false, message: REJECTION, data: null, traceId: TRACE }) };
+}
+
+function stubApi(options: { companyFault?: boolean; post?: () => Promise<StubResponse> } = {}) {
+  const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     const company = /\/api\/companies\/([^/?]+)/u.exec(url);
+
+    if (init?.method === "POST") {
+      return await (options.post ?? (async () => postedResponse()))();
+    }
 
     if (company !== null) {
       if (options.companyFault === true) {
@@ -172,6 +198,48 @@ async function chooseLine(index: number, field: "الحساب" | "العملة",
   await choose(line(index).getByLabelText(field), label);
   await waitFor(() => expect(line(index).getByLabelText(field)).toHaveValue(label));
 }
+
+function postCalls(fetchMock: ReturnType<typeof stubApi>) {
+  return fetchMock.mock.calls.filter((call) => call[1]?.method === "POST");
+}
+
+function postButton() {
+  return screen.getByRole("button", { name: "ترحيل القيد" });
+}
+
+// ‏قيد صالح كاملاً. **والسطر الأول يحمل سعراً بائتاً بقصد:** يُدخَل بالدولار وسعره 1320،
+// ثم تُبدَّل عملته إلى عملة الدفاتر آخراً — فيعرض 1 ويبقى في القيم 1320 (`JL07` على الشاشة)
+async function fillValidEntry() {
+  await chooseBranch(LABELS[0]!);
+  await screen.findByText("عملة الدفاتر: IQD");
+
+  fireEvent.change(screen.getByLabelText("تاريخ الترحيل"), { target: { value: "2026-09-28" } });
+  fireEvent.change(screen.getByLabelText("البيان"), { target: { value: "قيد تسوية شهري" } });
+
+  for (const [index, amount] of ["1000", "0.7576"].entries()) {
+    await chooseLine(index, "الحساب", ACCOUNT_LABELS[index]!);
+    await chooseLine(index, "العملة", CURRENCY_LABELS.USD);
+
+    fireEvent.change(line(index).getByLabelText("المبلغ"), { target: { value: amount } });
+    fireEvent.change(line(index).getByLabelText("سعر الصرف"), { target: { value: "1320" } });
+    fireEvent.change(line(index).getByLabelText("تاريخ سعر الصرف"), { target: { value: "2026-09-28" } });
+  }
+
+  await chooseLine(0, "العملة", CURRENCY_LABELS.IQD);
+  expect(line(0).getByLabelText("سعر الصرف")).toHaveValue("1");
+}
+
+const EXPECTED_PAYLOAD = {
+  branchId: BRANCHES[0]!.id,
+  postingDate: "2026-09-28",
+  documentDate: null,
+  description: "قيد تسوية شهري",
+  sourceModule: 1,
+  lines: [
+    { accountId: ACCOUNTS[0]!.id, currencyId: IQD.id, exchangeRate: "1", exchangeRateDate: "2026-09-28", description: null, debitFC: "1000" },
+    { accountId: ACCOUNTS[1]!.id, currencyId: USD.id, exchangeRate: "1320", exchangeRateDate: "2026-09-28", description: null, creditFC: "0.7576" }
+  ]
+};
 
 beforeEach(() => {
   setTokens({
@@ -414,5 +482,111 @@ describe("JournalEntryScreen — JE (سطور القيد)", () => {
     }
 
     expect(lineRows().map((row) => (within(row).getByLabelText("بيان السطر") as HTMLInputElement).value)).toEqual(["ب", "أ"]);
+  });
+});
+
+describe("JournalEntryScreen — JE (الترحيل)", () => {
+  // ‏طلب **واحد** يحمل الرأس والسطور (R-API-06)، وحمولته بالمساواة التامة: `sourceModule`
+  // ‏1، والجانب مفتاحٌ لا صفر، والسطر المقفل بسعر 1 رغم السعر البائت في قيمه
+  it("JE14: قيد صالح ⟵ POST واحد بالرأس والسطور معاً وبحمولة العقد حرفياً", async () => {
+    const fetchMock = stubApi();
+    renderScreen();
+
+    await fillValidEntry();
+    fireEvent.click(postButton());
+
+    await waitFor(() => expect(postCalls(fetchMock)).toHaveLength(1));
+
+    const [url, init] = postCalls(fetchMock)[0]!;
+
+    expect(String(url)).toBe("/api/journal-entries");
+    expect(JSON.parse(String(init?.body))).toEqual(EXPECTED_PAYLOAD);
+  });
+
+  // ‏**R-API-01 حرفياً:** لا توازن حيّ ولا مجموع في المتصفح — الخادم يرفض، ورسالته
+  // تُعرض **بحرفها**. والقيم تبقى: الرفض لا يمحو ما أدخله المستخدم ليصحّحه
+  it("JE15: رفض الخادم ⟵ رسالته بحرفها أعلى الشاشة، والقيد باقٍ كما أُدخل", async () => {
+    stubApi({ post: async () => rejectedResponse() });
+    renderScreen();
+
+    await fillValidEntry();
+    fireEvent.click(postButton());
+
+    expect(await screen.findByText(REJECTION)).toBeInTheDocument();
+
+    expect(screen.getByLabelText("البيان")).toHaveValue("قيد تسوية شهري");
+    expect(line(0).getByLabelText("الحساب")).toHaveValue(ACCOUNT_LABELS[0]);
+    expect(lineRows()).toHaveLength(2);
+  });
+
+  // ‏قرار 2026-09-28: رسالة الخادم ورقم المستند، ثم **تفريغ النموذج**. فالنموذج الممتلئ
+  // بعد النجاح كان يدعو إلى نقرة ثانية تُرحّل القيد نفسه برقم مستند ثانٍ
+  it("JE16: النجاح ⟵ رسالة الخادم ورقم المستند، والنموذج مفرَّغ إلى سطرين فارغين", async () => {
+    stubApi();
+    renderScreen();
+
+    await fillValidEntry();
+    fireEvent.click(postButton());
+
+    const status = await screen.findByRole("status");
+
+    expect(status).toHaveTextContent(POSTED);
+    expect(status).toHaveTextContent(DOCUMENT_NUMBER);
+
+    expect(screen.getByLabelText("البيان")).toHaveValue("");
+    expect(branchInput()).toHaveValue("");
+    expect(lineRows()).toHaveLength(2);
+    expect(line(0).getByLabelText("الحساب")).toHaveValue("");
+  });
+
+  it("JE17: نقرتان متتاليتان أثناء الإرسال ⟵ طلب ترحيل واحد", async () => {
+    let release: () => void = () => {};
+
+    const fetchMock = stubApi({
+      post: async () =>
+        await new Promise<StubResponse>((resolve) => {
+          release = () => resolve(postedResponse());
+        })
+    });
+
+    renderScreen();
+
+    await fillValidEntry();
+    fireEvent.click(postButton());
+
+    await waitFor(() => expect(postButton()).toBeDisabled());
+    fireEvent.click(postButton());
+
+    // ‏قيدٌ ثانٍ برقم مستند ثانٍ — لا يكشفه أي حارس في القاعدة، لأن كليهما سليم منفرداً
+    expect(postCalls(fetchMock)).toHaveLength(1);
+
+    release();
+    await screen.findByRole("status");
+  });
+
+  // ‏قرار الطفرات الدائم (`query-config.ts`): فشل الشبكة لا يميّز «لم يصل» عن «وصل
+  // ونُفِّذ وضاع الرد» — والإعادة في الثانية قيدٌ مكرَّر. فالإعادة قرار المستخدم
+  it("JE18: فشل الشبكة ⟵ خطأ معروض وطلب واحد، بلا إعادة تلقائية", async () => {
+    const fetchMock = stubApi({ post: async () => await Promise.reject(new TypeError("Failed to fetch")) });
+    renderScreen();
+
+    await fillValidEntry();
+    fireEvent.click(postButton());
+
+    expect(await screen.findByText("Failed to fetch")).toBeInTheDocument();
+    expect(postCalls(fetchMock)).toHaveLength(1);
+  });
+
+  // ‏أخطاء الرأس تظهر على الشاشة أول مرة — كانت محروسة في المخطط وحده بلا زرّ
+  it("JE19: نموذج فارغ ⟵ صفر طلب ترحيل، وأخطاء الرأس معروضة", async () => {
+    const fetchMock = stubApi();
+    renderScreen();
+
+    fireEvent.click(postButton());
+
+    expect(await screen.findByText("الفرع مطلوب.")).toBeInTheDocument();
+    expect(screen.getByText("القيد اليدوي يتطلب وصفاً لا يقل عن خمسة أحرف.")).toBeInTheDocument();
+
+    expect(postCalls(fetchMock)).toHaveLength(0);
   });
 });
