@@ -3,15 +3,24 @@ import { useWatch } from "react-hook-form";
 
 import { useAllBranches } from "../api/useAllBranches";
 import { useCompany } from "../api/useCompany";
+import type { UseCompanyResult } from "../api/useCompany";
 import { ApiErrorMessage } from "../components/ApiErrorMessage";
 import { BranchPicker } from "../components/pickers/BranchPicker";
 import { ControlledField, TextField, ZodForm } from "../forms/ZodForm";
-import { journalEntryHeaderSchema } from "../schemas/journal-entry-header-schema";
-import type { JournalEntryHeaderValues } from "../schemas/journal-entry-header-schema";
+import { journalEntryFormSchema, newLine } from "../schemas/journal-line-schema";
+import type { JournalEntryFormValues } from "../schemas/journal-line-schema";
+import { JournalEntryLines } from "./JournalEntryLines";
 
-const EMPTY_HEADER: JournalEntryHeaderValues = { branchId: "", postingDate: "", documentDate: "", description: "" };
+// ‏سطران لا سطر: الحدّ الأدنى الذي يقبله الخادم (50017). والجانبان مدين ثم دائن
+const DEFAULT_VALUES: JournalEntryFormValues = {
+  branchId: "",
+  postingDate: "",
+  documentDate: "",
+  description: "",
+  lines: [newLine("debit"), newLine("credit")]
+};
 
-function DateField(props: { name: keyof JournalEntryHeaderValues; label: string }) {
+function DateField(props: { name: "postingDate" | "documentDate"; label: string }) {
   const id = useId();
 
   return (
@@ -28,14 +37,18 @@ function DateField(props: { name: keyof JournalEntryHeaderValues; label: string 
 }
 
 // ‏الشركة **مشتقّة من الفرع المختار** لا من أول فرع ولا من الرمز (قرار V08). وقبل
-// الاختيار `null` فلا نداء (`JE03`). و`useAllBranches` هنا لا يُطلق نداءً ثانياً:
-// مفتاح الاستعلام نفسه الذي يملأ `<BranchPicker>`
-function BaseCurrency() {
-  const branchId = useWatch<JournalEntryHeaderValues, "branchId">({ name: "branchId" });
+// الاختيار `null` فلا نداء (`JE03`). و`useAllBranches` لا يُطلق نداءً ثانياً: مفتاح
+// الاستعلام نفسه الذي يملأ `<BranchPicker>`. ومستهلكان (العرض والسطور) لا يضاعفان
+// النداء: مفتاح `useCompany` واحد
+function useSelectedCompany(): UseCompanyResult {
+  const branchId = useWatch<JournalEntryFormValues, "branchId">({ name: "branchId" });
   const { branches } = useAllBranches();
 
-  const companyId = branches.find((branch) => branch.id === branchId)?.companyId ?? null;
-  const { status, company, error } = useCompany(companyId);
+  return useCompany(branches.find((branch) => branch.id === branchId)?.companyId ?? null);
+}
+
+function BaseCurrency() {
+  const { status, company, error } = useSelectedCompany();
 
   if (status === "error" && error !== null) {
     return <ApiErrorMessage error={error} />;
@@ -45,33 +58,43 @@ function BaseCurrency() {
   return company === null ? null : <p>{`عملة الدفاتر: ${company.baseCurrencyCode}`}</p>;
 }
 
-// ‏**رأس بلا إرسال — بقرار (2026-09-26).** رأسٌ بلا سطور لا يُرحَّل (50016)، فزرّ
-// الإرسال يأتي مع السطور ومعه `toHeaderRequest`. حتى ذلك الحين `onSubmit` فارغ لأن
-// لا شيء يُطلقه، وقواعد الرأس محروسة في المخطط (`JH`).
-//
-// ‏و`sourceModule` ليس هنا حقلاً ولا قيمة: يُفرض عند حدّ الإرسال وحده (`JE02`, `JH08`)
+// ‏قفل السعر يحتاج **معرّف** عملة الدفاتر لا رمزها. و`null` قبل معرفة الشركة، فلا قفل
+// مخمَّن (`JE11`)
+function Lines() {
+  const { company } = useSelectedCompany();
+
+  return <JournalEntryLines baseCurrencyId={company?.baseCurrencyId ?? null} />;
+}
+
+// ‏**بلا إرسال — بقرار (2026-09-26)، وقائم في جولة السطور.** زرّ الترحيل ومعه
+// ‏`toHeaderRequest`/`toLinesRequest` جولةٌ تالية. و`sourceModule` ليس هنا حقلاً
+// ولا قيمة: يُفرض عند حدّ الإرسال وحده (`JE02`, `JH08`)
 export function JournalEntryScreen() {
   return (
-    <ZodForm schema={journalEntryHeaderSchema} defaultValues={EMPTY_HEADER} onSubmit={() => {}}>
+    <ZodForm schema={journalEntryFormSchema} defaultValues={DEFAULT_VALUES} onSubmit={() => {}}>
       <h1>قيد يومية</h1>
 
-      {/* ‏النموذج يحمل `""` لا `null`: مدخل المخطط نصّ (`z.uuid`)، و`<BranchPicker>`
-          يفرّق «لا اختيار» بـ`null` — فالترجمة بين العقدين هنا وحدها */}
-      <ControlledField<string>
-        name="branchId"
-        render={(field) => (
-          <BranchPicker
-            value={field.value === "" ? null : field.value}
-            onChange={(branchId) => field.onChange(branchId ?? "")}
-          />
-        )}
-      />
+      <section aria-label="رأس القيد">
+        {/* ‏النموذج يحمل `""` لا `null`: مدخل المخطط نصّ (`z.uuid`)، و`<BranchPicker>`
+            يفرّق «لا اختيار» بـ`null` — فالترجمة بين العقدين هنا وحدها */}
+        <ControlledField<string>
+          name="branchId"
+          render={(field) => (
+            <BranchPicker
+              value={field.value === "" ? null : field.value}
+              onChange={(branchId) => field.onChange(branchId ?? "")}
+            />
+          )}
+        />
 
-      <BaseCurrency />
+        <BaseCurrency />
 
-      <DateField name="postingDate" label="تاريخ الترحيل" />
-      <DateField name="documentDate" label="تاريخ المستند" />
-      <TextField name="description" label="البيان" />
+        <DateField name="postingDate" label="تاريخ الترحيل" />
+        <DateField name="documentDate" label="تاريخ المستند" />
+        <TextField name="description" label="البيان" />
+      </section>
+
+      <Lines />
     </ZodForm>
   );
 }

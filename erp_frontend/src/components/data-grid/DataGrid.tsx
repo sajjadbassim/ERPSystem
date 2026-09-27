@@ -51,13 +51,24 @@ export type DataGridProps<TRow extends RowData> = {
   emptyMessage: string;
 
   onRowClick?: (row: TRow) => void;
+
+  // ‏هوية الصفّ ومفتاحه في React. بلاه فالهوية **الفهرس**: حذف صفّ من المنتصف يُعطي
+  // مكوّنات الصفّ المحذوف لما بعده، فتنتقل إليه كل حالة يحملها مكوّنٌ لا البيانات.
+  // اختياري: شبكة للعرض وحده بلا حذف (شجرة الحسابات) لا تحتاجه. يحرسه `G08`
+  getRowId?: (row: TRow) => string;
 };
 
 export function DataGrid<TRow extends RowData>(props: DataGridProps<TRow>) {
+  const { getRowId } = props;
+
   const table = useTable({
     features: gridFeatures,
     columns: props.columns,
-    data: props.rows
+    data: props.rows,
+
+    // ‏لفٌّ بوسيط واحد — درس `G06`: توقيع المكتبة `(originalRow, index, parent)`،
+    // وتمرير الفهرس يغري المستهلك بالرجوع إليه. يحرسه `G09`
+    ...(getRowId === undefined ? {} : { getRowId: (row: TRow) => getRowId(row) })
   });
 
   const rows = table.getRowModel().rows;

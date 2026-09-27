@@ -120,4 +120,48 @@ describe("DataGrid — G (الشبكة العامة، أول مصدر: شجرة 
     // والمستهلك قد يوازن بالمرجع (`===`) ليعرف الصف المحدَّد
     expect(onRowClick.mock.calls[0]?.[0]).toBe(ROWS[0]);
   });
+
+  // ‏🔒 `G07` محجوزة (حارس `<MoneyDisplay>` في الشبكة، الفجوة ٨) — لا يُعاد رقمها
+
+  // ‏حقل **غير متحكَّم به** في الخلية هو الكاشف: حالته في عنصر DOM لا في البيانات،
+  // فلا يتبع صفّه إلا إن تبعت هويةُ المكوّن هويةَ الصف. والحقل المتحكَّم به يُعاد
+  // رسمه من القيمة أياً كان المفتاح، فلا يكشف شيئاً
+  it("G08: getRowId ⟵ حذف صفّ من المنتصف لا يُزيح حالة الخلايا إلى صفّ آخر", () => {
+    const columns: GridColumn<AccountRow>[] = [
+      { accessorKey: "code", header: "رمز الحساب" },
+      { id: "note", header: "ملاحظة", cell: () => <input aria-label="ملاحظة" /> }
+    ];
+
+    const { rerender } = render(
+      <DataGrid rows={ROWS} columns={columns} emptyMessage="لا حسابات." getRowId={(row) => row.id} />
+    );
+
+    fireEvent.change(screen.getAllByLabelText("ملاحظة")[2]!, { target: { value: "للصفّ الثالث" } });
+
+    rerender(
+      <DataGrid rows={[ROWS[0]!, ROWS[2]!]} columns={columns} emptyMessage="لا حسابات." getRowId={(row) => row.id} />
+    );
+
+    const notes = screen.getAllByLabelText("ملاحظة");
+
+    // ‏الشرط الموجب أولاً: الصفّ الثاني الآن هو الثالث سابقاً (1020)
+    expect(bodyRowTexts().map((cells) => cells[0])).toEqual(["2010", "1020"]);
+    expect(notes.map((note) => (note as HTMLInputElement).value)).toEqual(["", "للصفّ الثالث"]);
+  });
+
+  it("G09: getRowId يتلقى الصفّ الأصلي بوسيط واحد", () => {
+    const getRowId = vi.fn((row: AccountRow) => row.id);
+
+    render(<DataGrid rows={ROWS} columns={COLUMNS} emptyMessage="لا حسابات." getRowId={getRowId} />);
+
+    // ‏درس `G06`: توقيع المكتبة `(originalRow, index, parent)` — وتمرير الفهرس يغري
+    // المستهلك بالرجوع إليه، وهو عين ما وُجد `getRowId` لتجنّبه
+    expect(getRowId.mock.calls.length).toBeGreaterThan(0);
+
+    for (const call of getRowId.mock.calls) {
+      expect(call).toHaveLength(1);
+    }
+
+    expect(getRowId.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining(ROWS));
+  });
 });

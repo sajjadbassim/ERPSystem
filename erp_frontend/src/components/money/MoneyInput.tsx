@@ -31,7 +31,8 @@ export type MoneyInputProps = {
   onChange: (next: MoneyInputValue) => void;
 };
 
-const LOCKED_RATE = "1";
+// ‏مُصدَّر لحدّ الإرسال (`toLinesRequest`): قيمة القفل واحدة في موضع واحد
+export const LOCKED_RATE = "1";
 
 // ‏موجب حصراً — الخادم يفرضه بـ50014 على المبلغ و50020 على السعر. وكل ما ليس عشرياً
 // موجباً يسقط في الشرط نفسه: الفارغ والمشوَّه والصفر والسالب. **شرط موجب واحد** بدل
