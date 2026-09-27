@@ -30,7 +30,11 @@ function LineAccount(props: { index: number }) {
     <ControlledField<string>
       name={`lines.${props.index}.accountId`}
       render={(field) => (
-        <AccountPicker value={field.value === "" ? null : field.value} onChange={(id) => field.onChange(id ?? "")} />
+        <AccountPicker
+          forPosting
+          value={field.value === "" ? null : field.value}
+          onChange={(id) => field.onChange(id ?? "")}
+        />
       )}
     />
   );

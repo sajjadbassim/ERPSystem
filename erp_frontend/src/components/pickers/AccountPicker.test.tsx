@@ -92,11 +92,18 @@ function stubPendingFetch() {
   return { release: () => release() };
 }
 
-function renderPicker(value: string | null, onChange: (accountId: string | null) => void) {
-  render(<AccountPicker value={value} onChange={onChange} />, { wrapper: createWrapper() });
+function renderPicker(value: string | null, onChange: (accountId: string | null) => void, forPosting?: boolean) {
+  render(<AccountPicker value={value} onChange={onChange} forPosting={forPosting} />, { wrapper: createWrapper() });
 
   return screen.getByLabelText("الحساب");
 }
+
+// ‏حساب تجميعي وحساب معطَّل، **باسمين لا يطابقان** أيّاً من الثلاثة: فـ`S13` تقيس الخروج
+// من المجموعة لا تشابه نصوص (نمط `INACTIVE` في `B`)
+const SUMMARY: AccountItem = { ...BASE, id: "0199a1f0-0000-7000-8000-0000000000a8", code: "1000", name: "الأصول المتداولة", isPostable: false };
+const INACTIVE: AccountItem = { ...BASE, id: "0199a1f0-0000-7000-8000-0000000000a9", code: "5100", name: "مصروف مغلق", isActive: false };
+
+const ALL_LABELS = [...LABELS, `${SUMMARY.code} — ${SUMMARY.name}`, `${INACTIVE.code} — ${INACTIVE.name}`];
 
 // ‏`mouseDown` ثم `click`: Autocomplete يفتح على `mouseDown` لا على `click` وحده،
 // و`fireEvent.click` لا يُطلق الأول. تفصيل أداة لا ادعاء — والحالات تقيس ما بعده
@@ -290,5 +297,38 @@ describe("AccountPicker — S (منتقي الحساب، بمعزل عن أي ن
     openPopup(input);
 
     await waitFor(() => expect(screen.queryByText("لا نتائج مطابقة.")).toBeNull());
+  });
+
+  // ‏‏══ `forPosting` — منتقي سطور القيد ════════════════════════════════════════
+  // ‏للتجربة وحدها (R-API-05): الخادم يرفض التجميعي بـ50009 والمعطَّل بـ50010 سواء
+  // رشّحنا أم لم نرشّح. والترشيح في المنتقي لا في `useAllAccounts` — الهوك مصدر أمين
+  // تحتاجه شجرة الحسابات لترى التجميعي والمعطَّل بالضبط
+
+  it("S12: forPosting ⟵ التجميعي والمعطَّل خارج الخيارات قبل أي فلترة نصّية", async () => {
+    stubPages([{ items: [...ACCOUNTS, SUMMARY, INACTIVE], hasNextPage: false }]);
+
+    // ‏المساواة لا الاحتواء: حضور الثلاثة **وغياب الاثنين** معاً، فلا تمرّ بالخواء
+    expect(await openAndReadOptions(renderPicker(null, vi.fn(), true))).toEqual(LABELS);
+  });
+
+  it("S13: الاستبعاد من المجموعة لا إخفاءٌ فوقها — الكتابة باسم التجميعي ⟵ «لا نتائج مطابقة»", async () => {
+    stubPages([{ items: [...ACCOUNTS, SUMMARY, INACTIVE], hasNextPage: false }]);
+    const input = renderPicker(null, vi.fn(), true);
+
+    expect(await openAndReadOptions(input)).toEqual(LABELS);
+
+    // ‏**نمط `B15`:** `S12` وحدها تخضرّ لو كان الاستبعاد بصريّاً — خيارٌ مُصيَّر ومخفيّ
+    // يخرج من شجرة الإتاحة، **ويبقى مبلوغاً بالكتابة** فيُختار ويُرحَّل عليه
+    fireEvent.change(input, { target: { value: "المتداولة" } });
+
+    await waitFor(() => expect(screen.queryByText("لا نتائج مطابقة.")).not.toBeNull());
+  });
+
+  // ‏الافتراض `false` هو ما يُبقي شجرة الحسابات وكل مستهلك قائم على سلوكه: منتقٍ بلا
+  // الخاصية يعرض كل شيء كما كان
+  it("S14: بلا forPosting ⟵ التجميعي والمعطَّل ظاهران", async () => {
+    stubPages([{ items: [...ACCOUNTS, SUMMARY, INACTIVE], hasNextPage: false }]);
+
+    expect(await openAndReadOptions(renderPicker(null, vi.fn()))).toEqual(ALL_LABELS);
   });
 });

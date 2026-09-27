@@ -41,10 +41,9 @@ const ACCOUNTS = {
 const USD = { code: "USD", name: "دولار أمريكي", symbol: "$", decimalPlaces: 2 };
 const CURRENCY_LABELS = { IQD: "د.ع — دينار عراقي", USD: "$ — دولار أمريكي" } as const;
 
-// ‏رسائل الإجراء المخزَّن **بحرفها** (`AddJournalPostingProcedures.cs:245,199`) —
+// ‏رسالة الإجراء المخزَّن **بحرفها** (`AddJournalPostingProcedures.cs:245`) —
 // والشاشة تنقلها ولا تؤلّفها
 const UNBALANCED = "القيد غير متوازن. كل سطوره بعملة الدفاتر فلا مجال لباقي تقريب.";
-const SUMMARY_ACCOUNT = "لا يجوز الترحيل على حساب تجميعي.";
 const POSTED = "تم ترحيل القيد بنجاح";
 
 // ‏تاريخ اليوم **محلياً** لا بـ`toISOString` (UTC): بعد منتصف الليل في بغداد يكون UTC
@@ -262,26 +261,17 @@ test("BJE03 — سطر بالدولار بسعر يدويّ وسطر بعملة 
   expect(Number(iqdLine?.creditBase)).toBe(13200);
 });
 
-test("BJE04 — الحساب التجميعي: يظهر في المنتقي، والخادم يرفضه بـ50009", async ({ page }) => {
-  const before = await countEntries(seeded.api, seeded.token, seeded.branchId);
-
+// ‏**تغيّر ادعاؤها 2026-09-28** مع `forPosting`: كانت تقيس أن التجميعي **يظهر** ثم يرفضه
+// الخادم بـ50009 — وقد قاست ذلك حيّاً. وصار التجميعي خارج منتقي السطر، **فمسار 50009 لم
+// يعد مبلوغاً من الواجهة** — والخادم يبقى الحَكَم له (R-API-05)
+test("BJE04 — الحساب التجميعي خارج منتقي سطر القيد، والقابلة للترحيل حاضرة كلها", async ({ page }) => {
   await openJournalEntry(page);
 
-  // ‏قياس لا ادعاء: `<AccountPicker>` لا يرشّح `isPostable` اليوم
-  const accountInput = line(page, 0).getByLabel("الحساب", { exact: true });
+  await line(page, 0).getByLabel("الحساب", { exact: true }).click();
 
-  await accountInput.click();
-  await expect(page.getByRole("listbox").getByRole("option", { name: ACCOUNTS.summary.label, exact: true })).toBeVisible();
-  await page.keyboard.press("Escape");
+  const options = (await page.getByRole("listbox").getByRole("option").allTextContents()).sort();
 
-  await fillHeader(page, "قيد على حساب تجميعي BJE04");
-
-  await fillLine(page, 0, { account: ACCOUNTS.summary.label, currency: CURRENCY_LABELS.IQD, amount: "500", side: "debit" });
-  await fillLine(page, 1, { account: ACCOUNTS.cash.label, currency: CURRENCY_LABELS.IQD, amount: "500", side: "credit" });
-
-  await post(page);
-
-  await expect(page.getByRole("alert").filter({ hasText: SUMMARY_ACCOUNT })).toHaveText(SUMMARY_ACCOUNT);
-
-  expect(await countEntries(seeded.api, seeded.token, seeded.branchId)).toBe(before);
+  // ‏المساواة لا الغياب وحده: حضور القابلين للترحيل **وغياب** `1200` وحساب العلامة
+  // التجميعي معاً — فلا تمرّ على قائمة فارغة
+  expect(options).toEqual([ACCOUNTS.cash.label, ACCOUNTS.iqdCash.label].sort());
 });

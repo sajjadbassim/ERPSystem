@@ -12,6 +12,10 @@ export type AccountPickerProps = {
 
   // ‏`null` عند تفريغ الاختيار: يفرّق «لا اختيار» عن «لم يُحمَّل بعد»
   onChange: (accountId: string | null) => void;
+
+  // ‏منتقٍ لسطر قيد: يستبعد ما لا يُرحَّل عليه — التجميعي (`isPostable = false`) والمعطَّل
+  // ‏(`isActive = false`). والافتراض `false` يُبقي كل مستهلك قائم على سلوكه (`S14`)
+  forPosting?: boolean;
 };
 
 // ‏الرمز وحده غامض والاسم وحده أغمض. والحقلان مقيسان في `AccountResponseDto`
@@ -29,14 +33,23 @@ export function AccountPicker(props: AccountPickerProps) {
   // كي لا يفترق المنتقيان على القرص
   const { status, accounts, error } = useAllAccounts();
 
+  // ‏**الترشيح هنا لا في `useAllAccounts`** — نمط `<BranchPicker>` نفسه: الهوك مصدر أمين
+  // تحتاجه شجرة الحسابات لترى التجميعي والمعطَّل بالضبط. و**الاستبعاد من المجموعة لا
+  // إخفاءٌ فوقها**: خيارٌ مُصيَّر ومخفيّ يبقى مبلوغاً بالكتابة (`S12` و`S13` معاً).
+  //
+  // ‏وهو تحقيق تجربة لا قاعدة (R-API-05): الخادم يرفض التجميعي بـ50009 والمعطَّل بـ50010
+  const options = props.forPosting === true
+    ? accounts.filter((account) => account.isPostable && account.isActive)
+    : accounts;
+
   // ‏الاشتقاق من القائمة لا حفظ الكائن: القيمة الواردة **معرّف**، والكائن المطابق
   // له يُعثر عليه هنا. وقبل اكتمال التحميل لا مطابق فيكون `null` — لا كائن مصطنع
-  const selected = accounts.find((account) => account.id === props.value) ?? null;
+  const selected = options.find((account) => account.id === props.value) ?? null;
 
   return (
     <>
       <Autocomplete
-        options={accounts}
+        options={options}
         value={selected}
         loading={status === "pending"}
         loadingText="جارٍ تحميل الحسابات…"

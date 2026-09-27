@@ -105,7 +105,7 @@ function rejectedResponse(): StubResponse {
   return { ok: false, status: 400, json: async () => ({ success: false, message: REJECTION, data: null, traceId: TRACE }) };
 }
 
-function stubApi(options: { companyFault?: boolean; post?: () => Promise<StubResponse> } = {}) {
+function stubApi(options: { companyFault?: boolean; post?: () => Promise<StubResponse>; accounts?: AccountItem[] } = {}) {
   const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     const company = /\/api\/companies\/([^/?]+)/u.exec(url);
@@ -127,7 +127,7 @@ function stubApi(options: { companyFault?: boolean; post?: () => Promise<StubRes
     }
 
     if (url.includes("/api/accounts")) {
-      return { ok: true, status: 200, json: async () => page(ACCOUNTS) };
+      return { ok: true, status: 200, json: async () => page(options.accounts ?? ACCOUNTS) };
     }
 
     if (url.includes("/api/currencies")) {
@@ -464,6 +464,17 @@ describe("JournalEntryScreen — JE (سطور القيد)", () => {
     // ‏الشرط الموجب: العملة بلغت `<MoneyInput>` فعلاً — رمزها بجوار المبلغ
     expect(line(0).getByLabelText("المبلغ")).toHaveAccessibleDescription("د.ع");
     expect(line(0).getByLabelText("سعر الصرف")).toBeEnabled();
+  });
+
+  // ‏الوصل لا المنتقي: `<AccountPicker>` يرشّح بـ`forPosting` (`S12`–`S14`)، وهذه تحرس
+  // أن سطور القيد **تمرّره**. والشرط الموجب أولاً: القابلة للترحيل حاضرة كلها
+  it("JE20: منتقي حساب السطر لا يعرض الحساب التجميعي", async () => {
+    const summary: AccountItem = { ...ACCOUNTS[0]!, id: "0199a1f0-0000-7000-8000-0000000000a9", code: "1000", name: "الأصول", isPostable: false };
+
+    stubApi({ accounts: [...ACCOUNTS, summary] });
+    renderScreen();
+
+    expect(await openAndReadOptions(line(0).getByLabelText("الحساب"))).toEqual(ACCOUNT_LABELS);
   });
 
   // ‏قرار 2026-09-27: لا فرز في شبكة السطور — ترتيب السطور ترتيب القيد
