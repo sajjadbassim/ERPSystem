@@ -7,9 +7,9 @@ public interface IAccountRepository
 {
     Task<Account?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
-    Task<List<Account>> GetPagedAsync(PaginationParams pagination, CancellationToken ct = default);
+    Task<List<Account>> GetPagedAsync(Guid companyId, PaginationParams pagination, CancellationToken ct = default);
 
-    Task<int> CountAsync(CancellationToken ct = default);
+    Task<int> CountAsync(Guid companyId, CancellationToken ct = default);
 
     Task<bool> CodeExistsInCompanyAsync(Guid companyId, string code, CancellationToken ct = default);
 

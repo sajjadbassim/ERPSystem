@@ -196,20 +196,25 @@ public class BranchTests(TestDatabase database) : IdentityTestBase(database)
 
     // K17 — التفرّد على مستوى الشركة لا النظام: نفس الرمز مقبول في شركة أخرى.
     // الرمز يُنشأ هنا في الشركتين تباعاً لا يُؤخذ من البذر: البذر يضع BR1 في **كل**
-    // شركة يبنيها، فاختباره كان سيصطدم بتكرار داخل الشركة الثانية لا بحدّ الشركة
+    // شركة يبنيها، فاختباره كان سيصطدم بتكرار داخل الشركة الثانية لا بحدّ الشركة.
+    //
+    // ‏⚠ **تغيّر فاعله 2026-09-28 لا ادعاؤه:** كان مدير الشركة الأولى يُنشئ الفرع الثاني في
+    // الشركة الأخرى — وهي **الكتابة عبر الشركات** التي يرفضها الآن `G28`. فالفرع الثاني
+    // يُنشئه مدير شركته هو، والادعاء (التفرّد داخل الشركة لا النظام) كما كان
     [Fact]
     public async Task K17_CreateBranch_SameCodeInAnotherCompany_IsAccepted()
     {
         var identity = await NewIdentityAsync();
-        var otherCompany = await ScenarioBuilder.CreateAsync(Database);
+        var other = await NewIdentityAsync();
         var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+        var (otherToken, _) = await LoginAsync(other.AdminUserName);
 
         var first = await AuthClient.PostAsync(Client, MasterDataClient.BranchesPath, accessToken,
             new { companyId = identity.Company.CompanyId, code = "BRX", name = "فرع في الشركة الأولى" });
         first.EnsureSuccessStatusCode();
 
-        var second = await AuthClient.PostAsync(Client, MasterDataClient.BranchesPath, accessToken,
-            new { companyId = otherCompany.CompanyId, code = "BRX", name = "فرع في شركة أخرى" });
+        var second = await AuthClient.PostAsync(Client, MasterDataClient.BranchesPath, otherToken,
+            new { companyId = other.Company.CompanyId, code = "BRX", name = "فرع في شركة أخرى" });
 
         Assert.Equal(HttpStatusCode.Created, second.StatusCode);
     }
@@ -225,5 +230,59 @@ public class BranchTests(TestDatabase database) : IdentityTestBase(database)
             new { companyId = identity.Company.CompanyId, code = "BR8", name = "فرع ممنوع" });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // ‏‏══ G26–G28: الفرع المفرد والإنشاء عبر الشركات ══════════════════════════════
+    // ‏المفرد بنمط `EnsureBranchAccessAsync` القائم (403 للحالتين، لا 404): حدّاه حدّا
+    // القائمة نفسها — الشركة، ثم الفروع المخصَّصة لمن لا يحمل `AllBranches`
+
+    private static string BranchPath(Guid id) => $"{MasterDataClient.BranchesPath}/{id}";
+
+    // G26
+    [Fact]
+    public async Task G26_GetBranch_OwnCompanySucceeds_AnotherCompanysIsForbidden()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthClient.GetAsync(Client, BranchPath(identity.Company.BranchId), accessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthClient.GetAsync(Client, BranchPath(other.BranchId), accessToken)).StatusCode);
+    }
+
+    // G27 — الحدّ الثاني على المفرد كما على القائمة (K25): فرع في شركته غير مخصَّص له،
+    // ولا يحمل AllBranches ⟵ 403. والشرط الموجب: فرعه المخصَّص يُقرأ
+    [Fact]
+    public async Task G27_GetBranch_UnassignedBranchWithoutAllBranches_IsForbidden()
+    {
+        var identity = await NewIdentityAsync();
+
+        await IdentityScenarioBuilder.GrantAsync(
+            Database, identity.BranchRoleId, [Permissions.MasterDataRead], identity.Company.UserId);
+
+        var (accessToken, _) = await LoginAsync(identity.BranchUserName);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthClient.GetAsync(Client, BranchPath(identity.Company.BranchId), accessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthClient.GetAsync(Client, BranchPath(identity.Company.SecondBranchId), accessToken)).StatusCode);
+    }
+
+    // G28 — كتابة عبر الشركات: كان الإنشاء يفحص وجود الشركة لا أنها شركة الفاعل
+    [Fact]
+    public async Task G28_CreateBranch_InAnotherCompany_IsForbiddenAndWritesNothing()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client, MasterDataClient.BranchesPath, accessToken,
+            new { companyId = other.CompanyId, code = "BRZ", name = "فرع مدسوس" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(0, await PostingClient.ScalarAsync<int>(Database,
+            "SELECT COUNT(*) FROM Branches WHERE CompanyId = @company AND Code = 'BRZ'", ("@company", other.CompanyId)));
     }
 }

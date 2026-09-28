@@ -7,9 +7,9 @@ public interface ICompanyRepository
 {
     Task<Company?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
-    Task<List<Company>> GetPagedAsync(PaginationParams pagination, CancellationToken ct = default);
+    Task<List<Company>> GetPagedAsync(Guid companyId, PaginationParams pagination, CancellationToken ct = default);
 
-    Task<int> CountAsync(CancellationToken ct = default);
+    Task<int> CountAsync(Guid companyId, CancellationToken ct = default);
 
     Task<bool> CodeExistsAsync(string code, CancellationToken ct = default);
 

@@ -1,10 +1,63 @@
 using System.Net;
+using System.Text.Json;
+using ErpApi.Core.Constants;
 using ErpApi.Tests.Infrastructure;
 
 namespace ErpApi.Tests.MasterData;
 
 public class CompanyTests(TestDatabase database) : IdentityTestBase(database)
 {
+    private static string CompanyPath(Guid id) => $"{MasterDataClient.CompaniesPath}/{id}";
+
+    // ‏‏══ G23–G25: الشركة بحدّ شركتها لنفسها (`Company.Id == scopedCompanyId`) ═══════
+
+    // G23
+    [Fact]
+    public async Task G23_ListCompanies_ReturnsOnlyTheActorsOwnCompany()
+    {
+        var identity = await NewIdentityAsync();
+        _ = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var items = await AccountingClient.ReadItemsAsync(
+            await AuthClient.GetAsync(Client, $"{MasterDataClient.CompaniesPath}?PageNumber=1&PageSize=100", accessToken));
+
+        Assert.Equal([identity.Company.CompanyId], items.Select(company => company.GetProperty("id").GetGuid()));
+    }
+
+    // G24 — نظير K27: العدّاد من المرشّح نفسه
+    [Fact]
+    public async Task G24_ListCompanies_TotalCountIsOne()
+    {
+        var identity = await NewIdentityAsync();
+        _ = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.GetAsync(Client, $"{MasterDataClient.CompaniesPath}?PageNumber=1&PageSize=100", accessToken);
+
+        Assert.Equal(1, (await AccountingClient.ReadDataAsync(response)).GetProperty("totalCount").GetInt32());
+    }
+
+    // G25
+    [Fact]
+    public async Task G25_GetCompany_OwnSucceeds_MissingIs404_AnotherIs403()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthClient.GetAsync(Client, CompanyPath(identity.Company.CompanyId), accessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await AuthClient.GetAsync(Client, CompanyPath(Guid.CreateVersion7()), accessToken)).StatusCode);
+
+        var foreign = await AuthClient.GetAsync(Client, CompanyPath(other.CompanyId), accessToken);
+        using var body = JsonDocument.Parse(await foreign.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.Forbidden, foreign.StatusCode);
+        Assert.Equal(AuthMessages.CompanyOutOfScope, body.RootElement.GetProperty("message").GetString());
+    }
+
     // R-AMT-07-a: الحد = 10^(−DecimalPlaces) لعملة الأساس — أصغر وحدة قابلة للعرض.
     // باقٍ أصغر منها لا يظهر للمستخدم أصلاً، وأكبر منها رقم حقيقي يستحق تفسيراً لا ابتلاعاً.
     // الاشتقاق يُفحص لا يُفترض: ثابت واحد لكل العملات خاطئ في اتجاهين معاً

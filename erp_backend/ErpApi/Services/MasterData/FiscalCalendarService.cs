@@ -33,12 +33,15 @@ public class FiscalCalendarService : IFiscalCalendarService
     {
         await _userService.EnsurePermissionAsync(Permissions.MasterDataRead, ct);
 
-        var items = await _calendarRepository.GetYearsPagedAsync(pagination, ct);
+        // الحدّ شركة الفاعل (الدين 8، G17)
+        var companyId = await _userService.GetCompanyScopeAsync(ct);
+
+        var items = await _calendarRepository.GetYearsPagedAsync(companyId, pagination, ct);
 
         return new PagedResponse<FiscalYearResponseDto>
         {
             Data = [.. items.Select(MapYear)],
-            TotalCount = await _calendarRepository.CountYearsAsync(ct),
+            TotalCount = await _calendarRepository.CountYearsAsync(companyId, ct),
             PageNumber = pagination.PageNumber,
             PageSize = pagination.PageSize
         };
@@ -48,13 +51,20 @@ public class FiscalCalendarService : IFiscalCalendarService
     {
         await _userService.EnsurePermissionAsync(Permissions.MasterDataRead, ct);
 
-        return MapYear(await LoadYearAsync(id, ct));
+        // التحميل ثم الفحص: 404 لغير الموجودة، و403 لسنة شركة أخرى (G19)
+        var year = await LoadYearAsync(id, ct);
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), year.CompanyId);
+
+        return MapYear(year);
     }
 
     public async Task<FiscalYearResponseDto> CreateYearAsync(
         FiscalYearCreateDto request, CancellationToken ct = default)
     {
         await _userService.EnsurePermissionAsync(Permissions.FiscalYearManage, ct);
+
+        // الشركة المطلوبة شركة الفاعل لا مجرد موجودة — كان الإنشاء في شركة أخرى يمرّ (G21)
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), request.CompanyId);
 
         _ = await _companyRepository.GetByIdAsync(request.CompanyId, ct)
             ?? throw new BusinessRuleException("الشركة المحددة غير موجودة.");
@@ -113,7 +123,10 @@ public class FiscalCalendarService : IFiscalCalendarService
     {
         await _userService.EnsurePermissionAsync(Permissions.MasterDataRead, ct);
 
-        return MapPeriod(await LoadPeriodAsync(id, ct));
+        var period = await LoadPeriodAsync(id, ct);
+        await EnsurePeriodInActorCompanyAsync(period, ct);
+
+        return MapPeriod(period);
     }
 
     public async Task<FiscalPeriodResponseDto> CreatePeriodAsync(
@@ -159,6 +172,9 @@ public class FiscalCalendarService : IFiscalCalendarService
 
         var period = await LoadPeriodAsync(id, ct);
 
+        // إقفال فترة شركة أخرى كان يمرّ (G22) — الفحص قبل أي تعديل
+        await EnsurePeriodInActorCompanyAsync(period, ct);
+
         period.IsClosed = true;
         _calendarRepository.UpdatePeriod(period);
 
@@ -174,6 +190,14 @@ public class FiscalCalendarService : IFiscalCalendarService
     private async Task<FiscalPeriod> LoadPeriodAsync(Guid id, CancellationToken ct) =>
         await _calendarRepository.GetPeriodAsync(id, ct)
         ?? throw new NotFoundException("الفترة المالية غير موجودة.");
+
+    // ‏الفترة بلا `CompanyId`: شركتها شركة سنتها. والسنة موجودة بحكم المفتاح الأجنبي،
+    // ‏فغيابها هنا خلل بيانات لا «غير موجود» يُردّ للمستخدم (G20، G22)
+    private async Task EnsurePeriodInActorCompanyAsync(FiscalPeriod period, CancellationToken ct)
+    {
+        var year = await LoadYearAsync(period.FiscalYearId, ct);
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), year.CompanyId);
+    }
 
     private static FiscalYearResponseDto MapYear(FiscalYear year) => new()
     {

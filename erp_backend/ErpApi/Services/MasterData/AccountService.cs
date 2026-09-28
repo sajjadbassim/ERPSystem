@@ -33,12 +33,15 @@ public class AccountService : IAccountService
     {
         await _userService.EnsurePermissionAsync(Permissions.MasterDataRead, ct);
 
-        var items = await _accountRepository.GetPagedAsync(pagination, ct);
+        // الصلاحية تأذن بالقراءة ولا تحدّ المقروء — والحدّ شركة الفاعل (الدين 8، G11)
+        var companyId = await _userService.GetCompanyScopeAsync(ct);
+
+        var items = await _accountRepository.GetPagedAsync(companyId, pagination, ct);
 
         return new PagedResponse<AccountResponseDto>
         {
             Data = [.. items.Select(Map)],
-            TotalCount = await _accountRepository.CountAsync(ct),
+            TotalCount = await _accountRepository.CountAsync(companyId, ct),
             PageNumber = pagination.PageNumber,
             PageSize = pagination.PageSize
         };
@@ -51,6 +54,9 @@ public class AccountService : IAccountService
         var account = await _accountRepository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException("الحساب غير موجود.");
 
+        // التحميل ثم الفحص: 404 لغير الموجود، و403 لموجودٍ خارج الشركة (G14)
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), account.CompanyId);
+
         return Map(account);
     }
 
@@ -58,6 +64,10 @@ public class AccountService : IAccountService
         AccountCreateDto request, CancellationToken ct = default)
     {
         await _userService.EnsurePermissionAsync(Permissions.AccountManage, ct);
+
+        // ‏الشركة المطلوبة **شركة الفاعل**، لا مجرد شركة موجودة — كان الإنشاء في شركة أخرى
+        // يمرّ (G15). والفحص قبل الوجود، فشركة غير موجودة ليست شركته أيضاً
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), request.CompanyId);
 
         _ = await _companyRepository.GetByIdAsync(request.CompanyId, ct)
             ?? throw new BusinessRuleException("الشركة المحددة غير موجودة.");
@@ -113,6 +123,9 @@ public class AccountService : IAccountService
 
         var account = await _accountRepository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException("الحساب غير موجود.");
+
+        // تعطيل حساب شركة أخرى كان يمرّ (G16) — الفحص قبل أي تعديل
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), account.CompanyId);
 
         // R-LIFE-06 والمخاطرة 32-a: JournalLine بلا Query Filter وعلاقته بالحساب إلزامية.
         // تعطيل حساب له حركة يجعل EF يولّد INNER JOIN بمرشِّح المبدأ عند التنقّل،

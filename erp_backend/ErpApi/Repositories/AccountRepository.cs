@@ -14,16 +14,20 @@ public class AccountRepository : IAccountRepository
     public Task<Account?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         _context.Accounts.FirstOrDefaultAsync(a => a.Id == id, ct);
 
-    public Task<List<Account>> GetPagedAsync(PaginationParams pagination, CancellationToken ct = default) =>
-        _context.Accounts
-            .AsNoTracking()
+    public Task<List<Account>> GetPagedAsync(Guid companyId, PaginationParams pagination, CancellationToken ct = default) =>
+        Filter(companyId)
             .OrderBy(a => a.Code)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .ToListAsync(ct);
 
-    public Task<int> CountAsync(CancellationToken ct = default) =>
-        _context.Accounts.AsNoTracking().CountAsync(ct);
+    public Task<int> CountAsync(Guid companyId, CancellationToken ct = default) =>
+        Filter(companyId).CountAsync(ct);
+
+    // ‏الشركة **قيمةٌ تُمرَّر لا قرار يُتّخذ هنا** (بند 4): من هي شركة الفاعل يقرّره
+    // ‏`UserService`. ومصدر واحد للقائمة والعدّاد، فلا صفحة مقيَّدة بعدّاد غير مقيَّد (`G12`)
+    private IQueryable<Account> Filter(Guid companyId) =>
+        _context.Accounts.AsNoTracking().Where(a => a.CompanyId == companyId);
 
     public Task<bool> CodeExistsInCompanyAsync(
         Guid companyId, string code, CancellationToken ct = default) =>

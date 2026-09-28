@@ -10,5 +10,9 @@ public static class AuthMessages
 
     public const string BranchOutOfScope = "لا تملك صلاحية الوصول إلى هذا الفرع.";
 
+    // ‏كيان موجود في شركة غير شركة الفاعل (الدين 8). والتمييز عن 404 مقصود بقرار: نمط
+    // ‏`JournalEntryService.GetByIdAsync` لا نمط `EnsureBranchAccessAsync`
+    public const string CompanyOutOfScope = "لا تملك صلاحية الوصول إلى بيانات هذه الشركة.";
+
     public const string PermissionMissing = "لا تملك الصلاحية اللازمة لهذه العملية.";
 }

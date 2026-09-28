@@ -1,10 +1,126 @@
 using System.Net;
+using System.Text.Json;
+using ErpApi.Core.Constants;
 using ErpApi.Tests.Infrastructure;
 
 namespace ErpApi.Tests.Accounting;
 
 public class FiscalCalendarTests(TestDatabase database) : IdentityTestBase(database)
 {
+    private static string YearPath(Guid id) => $"{AccountingClient.FiscalYearsPath}/{id}";
+
+    private static string PeriodPath(Guid id) => $"{AccountingClient.FiscalPeriodsPath}/{id}";
+
+    private static async Task<string?> MessageAsync(HttpResponseMessage response)
+    {
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return document.RootElement.GetProperty("message").GetString();
+    }
+
+    // ‏‏══ G17–G22: حدّ الشركة على السنوات والفترات المالية ══════════════════════════
+
+    // G17
+    [Fact]
+    public async Task G17_ListFiscalYears_ReturnsOnlyTheActorsCompany()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var ids = (await AccountingClient.ReadItemsAsync(await AuthClient.GetAsync(Client,
+                $"{AccountingClient.FiscalYearsPath}?PageNumber=1&PageSize=100", accessToken)))
+            .Select(year => year.GetProperty("id").GetGuid()).ToList();
+
+        Assert.Contains(identity.Company.FiscalYearId, ids);
+        Assert.DoesNotContain(other.FiscalYearId, ids);
+    }
+
+    // G18 — نظير K27
+    [Fact]
+    public async Task G18_ListFiscalYears_TotalCountMatchesTheScopedList()
+    {
+        var identity = await NewIdentityAsync();
+        _ = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.GetAsync(Client, $"{AccountingClient.FiscalYearsPath}?PageNumber=1&PageSize=100", accessToken);
+        var totalCount = (await AccountingClient.ReadDataAsync(response)).GetProperty("totalCount").GetInt32();
+
+        var expected = await PostingClient.ScalarAsync<int>(Database,
+            "SELECT COUNT(*) FROM FiscalYears WHERE CompanyId = @company AND IsDeleted = 0",
+            ("@company", identity.Company.CompanyId));
+
+        Assert.Equal(expected, totalCount);
+        Assert.Equal(totalCount, (await AccountingClient.ReadItemsAsync(response)).Count);
+    }
+
+    // G19 — السنة: شركتها 200، وغير الموجودة 404، وسنة شركة أخرى 403
+    [Fact]
+    public async Task G19_GetFiscalYear_OwnSucceeds_MissingIs404_AnotherCompanysIs403()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthClient.GetAsync(Client, YearPath(identity.Company.FiscalYearId), accessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await AuthClient.GetAsync(Client, YearPath(Guid.CreateVersion7()), accessToken)).StatusCode);
+
+        var foreign = await AuthClient.GetAsync(Client, YearPath(other.FiscalYearId), accessToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, foreign.StatusCode);
+        Assert.Equal(AuthMessages.CompanyOutOfScope, await MessageAsync(foreign));
+    }
+
+    // G20 — الفترة عبر سنتها: لا `CompanyId` على الفترة، فالحدّ يمرّ بعلاقتين
+    [Fact]
+    public async Task G20_GetFiscalPeriod_ThroughItsYear_OwnSucceeds_MissingIs404_AnotherCompanysIs403()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthClient.GetAsync(Client, PeriodPath(identity.Company.OpenPeriodId), accessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await AuthClient.GetAsync(Client, PeriodPath(Guid.CreateVersion7()), accessToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthClient.GetAsync(Client, PeriodPath(other.OpenPeriodId), accessToken)).StatusCode);
+    }
+
+    // G21 — كتابة عبر الشركات
+    [Fact]
+    public async Task G21_CreateFiscalYear_InAnotherCompany_IsForbiddenAndWritesNothing()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client, AccountingClient.FiscalYearsPath, accessToken,
+            new { companyId = other.CompanyId, code = "FY2029", startDate = "2029-01-01", endDate = "2029-12-31" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(0, await PostingClient.ScalarAsync<int>(Database,
+            "SELECT COUNT(*) FROM FiscalYears WHERE CompanyId = @company AND Code = 'FY2029'", ("@company", other.CompanyId)));
+    }
+
+    // G22 — إقفال فترة شركة أخرى: كان يقفلها
+    [Fact]
+    public async Task G22_ClosePeriod_OfAnotherCompany_IsForbiddenAndLeavesItOpen()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client,
+            AccountingClient.ClosePeriodPath(other.RegularPeriodIds[8]), accessToken, new { });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.False(await PostingClient.ScalarAsync<bool>(Database,
+            "SELECT IsClosed FROM FiscalPeriods WHERE Id = @id", ("@id", other.RegularPeriodIds[8])));
+    }
+
     // L09
     [Fact]
     public async Task L09_CreateFiscalYear_ValidRange_ReturnsCreated()

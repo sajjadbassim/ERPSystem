@@ -53,6 +53,11 @@ public interface IUserService
     // أما تضييق النطاق إلى الفروع المخصَّصة فليس استعمالاً له، فلا أثر لـه (الحارس K28)
     Task<BranchScope> GetBranchScopeAsync(CancellationToken ct = default);
 
+    // ‏**حدّ الشركة وحده — استفهام لا بوّابة**، نظير `GetBranchScopeAsync` بلا حدّها الثاني.
+    // تُرجع شركة الفاعل ليُمرَّر إلى المستودع قيمةً، أو ليُقارَن بشركة كيانٍ مُحمَّل.
+    // ولا أثر تدقيق: لا صلاحية واسعة تُستعمل هنا (الدين 8، `G11`–`G25`)
+    Task<Guid> GetCompanyScopeAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<string>> GetPermissionsAsync(CancellationToken ct = default);
 
     // تُستدعى من حدث التحقق من الرمز، قبل أن يُبنى HttpContext.User — فتأخذ المطالبات

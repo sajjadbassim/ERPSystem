@@ -10,9 +10,9 @@ public interface IFiscalCalendarRepository
     Task<FiscalYear?> GetYearAsync(Guid id, CancellationToken ct = default);
 
     Task<List<FiscalYear>> GetYearsPagedAsync(
-        PaginationParams pagination, CancellationToken ct = default);
+        Guid companyId, PaginationParams pagination, CancellationToken ct = default);
 
-    Task<int> CountYearsAsync(CancellationToken ct = default);
+    Task<int> CountYearsAsync(Guid companyId, CancellationToken ct = default);
 
     Task<bool> YearCodeExistsAsync(Guid companyId, string code, CancellationToken ct = default);
 

@@ -15,16 +15,19 @@ public class FiscalCalendarRepository : IFiscalCalendarRepository
         _context.FiscalYears.FirstOrDefaultAsync(y => y.Id == id, ct);
 
     public Task<List<FiscalYear>> GetYearsPagedAsync(
-        PaginationParams pagination, CancellationToken ct = default) =>
-        _context.FiscalYears
-            .AsNoTracking()
+        Guid companyId, PaginationParams pagination, CancellationToken ct = default) =>
+        YearsOf(companyId)
             .OrderByDescending(y => y.StartDate)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .ToListAsync(ct);
 
-    public Task<int> CountYearsAsync(CancellationToken ct = default) =>
-        _context.FiscalYears.AsNoTracking().CountAsync(ct);
+    public Task<int> CountYearsAsync(Guid companyId, CancellationToken ct = default) =>
+        YearsOf(companyId).CountAsync(ct);
+
+    // ‏الشركة قيمةٌ تُمرَّر لا قرار يُتّخذ هنا، ومصدر واحد للقائمة والعدّاد (`G18`)
+    private IQueryable<FiscalYear> YearsOf(Guid companyId) =>
+        _context.FiscalYears.AsNoTracking().Where(y => y.CompanyId == companyId);
 
     public Task<bool> YearCodeExistsAsync(Guid companyId, string code, CancellationToken ct = default) =>
         _context.FiscalYears

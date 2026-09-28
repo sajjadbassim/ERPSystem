@@ -58,6 +58,10 @@ public class BranchService : IBranchService
     {
         await _userService.EnsurePermissionAsync(Permissions.MasterDataRead, ct);
 
+        // ‏بنمط `EnsureBranchAccessAsync` القائم لا بنمط 404/403: حدّا القائمة نفسها — الشركة،
+        // ‏ثم الفروع المخصَّصة لمن لا يحمل `AllBranches` — و403 لغير الموجود أيضاً (G26، G27)
+        await _userService.EnsureBranchAccessAsync(id, ct);
+
         var branch = await _branchRepository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException("الفرع غير موجود.");
 
@@ -68,6 +72,9 @@ public class BranchService : IBranchService
         BranchCreateDto request, CancellationToken ct = default)
     {
         await _userService.EnsurePermissionAsync(Permissions.BranchManage, ct);
+
+        // الشركة المطلوبة شركة الفاعل لا مجرد موجودة — كان الإنشاء في شركة أخرى يمرّ (G28)
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), request.CompanyId);
 
         _ = await _companyRepository.GetByIdAsync(request.CompanyId, ct)
             ?? throw new BusinessRuleException("الشركة المحددة غير موجودة.");

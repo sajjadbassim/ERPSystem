@@ -1,10 +1,123 @@
 using System.Net;
+using System.Text.Json;
+using ErpApi.Core.Constants;
 using ErpApi.Tests.Infrastructure;
 
 namespace ErpApi.Tests.Accounting;
 
 public class AccountTests(TestDatabase database) : IdentityTestBase(database)
 {
+    private static List<Guid> IdsOf(IEnumerable<JsonElement> items) =>
+        [.. items.Select(item => item.GetProperty("id").GetGuid())];
+
+    private static async Task<string?> MessageAsync(HttpResponseMessage response)
+    {
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return document.RootElement.GetProperty("message").GetString();
+    }
+
+    // ‏‏══ G11–G16: حدّ الشركة على الحسابات (الدين 8 في ROADMAP §8) ═══════════════
+    // ‏امتداد `G10`: التقييد بالشركة مجموعة النطاق `G` أياً كان الملف الذي يسكنه.
+    // والشركة الثانية تحمل **الرموز نفسها** (1101 …) بمعرّفات أخرى — فالمقارنة بالمعرّف
+
+    // G11
+    [Fact]
+    public async Task G11_ListAccounts_ReturnsOnlyTheActorsCompany()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var ids = IdsOf(await AccountingClient.ReadItemsAsync(
+            await AuthClient.GetAsync(Client, $"{AccountingClient.AccountsPath}?PageNumber=1&PageSize=100", accessToken)));
+
+        // ‏الشرط الموجب أولاً: حسابات الشركة حاضرة — فلا يمرّ النفي على قائمة فارغة
+        Assert.Contains(identity.Company.CashAccountId, ids);
+        Assert.DoesNotContain(other.CashAccountId, ids);
+    }
+
+    // G12 — القائمة والعدّاد من مرشّح واحد (نظير K27): عدّاد غير مقيَّد مع صفحة مقيَّدة
+    // ترقيمٌ كاذب وصفحاتٌ فارغة تصدّقها الواجهة
+    [Fact]
+    public async Task G12_ListAccounts_TotalCountMatchesTheScopedList()
+    {
+        var identity = await NewIdentityAsync();
+        _ = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.GetAsync(Client, $"{AccountingClient.AccountsPath}?PageNumber=1&PageSize=100", accessToken);
+        var totalCount = (await AccountingClient.ReadDataAsync(response)).GetProperty("totalCount").GetInt32();
+
+        var expected = await PostingClient.ScalarAsync<int>(Database,
+            "SELECT COUNT(*) FROM Accounts WHERE CompanyId = @company AND IsDeleted = 0",
+            ("@company", identity.Company.CompanyId));
+
+        Assert.Equal(expected, totalCount);
+        Assert.Equal(totalCount, (await AccountingClient.ReadItemsAsync(response)).Count);
+    }
+
+    // G13
+    [Fact]
+    public async Task G13_GetAccount_OwnCompany_Succeeds()
+    {
+        var identity = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.GetAsync(Client,
+            $"{AccountingClient.AccountsPath}/{identity.Company.CashAccountId}", accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // G14 — **تمييز لا توحيد** (نمط `JournalEntryService.GetByIdAsync`): غير الموجود 404،
+    // والموجود في شركة أخرى 403 برسالة حدّ الشركة
+    [Fact]
+    public async Task G14_GetAccount_MissingIs404_AnotherCompanysIs403()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var missing = await AuthClient.GetAsync(Client, $"{AccountingClient.AccountsPath}/{Guid.CreateVersion7()}", accessToken);
+        var foreign = await AuthClient.GetAsync(Client, $"{AccountingClient.AccountsPath}/{other.CashAccountId}", accessToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, foreign.StatusCode);
+        Assert.Equal(AuthMessages.CompanyOutOfScope, await MessageAsync(foreign));
+    }
+
+    // G15 — **كتابة عبر الشركات**: كان الإنشاء يفحص وجود الشركة لا أنها شركة الفاعل
+    [Fact]
+    public async Task G15_CreateAccount_InAnotherCompany_IsForbiddenAndWritesNothing()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client, AccountingClient.AccountsPath, accessToken,
+            NewAccount(other.CompanyId, "1999", "حساب مدسوس"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(0, await PostingClient.ScalarAsync<int>(Database,
+            "SELECT COUNT(*) FROM Accounts WHERE CompanyId = @company AND Code = '1999'", ("@company", other.CompanyId)));
+    }
+
+    // G16
+    [Fact]
+    public async Task G16_DeactivateAccount_OfAnotherCompany_IsForbiddenAndLeavesItActive()
+    {
+        var identity = await NewIdentityAsync();
+        var other = (await NewIdentityAsync()).Company;
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+
+        var response = await AuthClient.PostAsync(Client,
+            AccountingClient.DeactivateAccountPath(other.RevenueAccountId), accessToken, new { });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.True(await PostingClient.ScalarAsync<bool>(Database,
+            "SELECT IsActive FROM Accounts WHERE Id = @id", ("@id", other.RevenueAccountId)));
+    }
+
     private static object NewAccount(
         Guid companyId, string code, string name,
         byte accountType = 1, byte normalBalance = 0, bool isPostable = true,

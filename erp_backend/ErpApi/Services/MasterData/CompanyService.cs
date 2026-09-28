@@ -57,7 +57,10 @@ public class CompanyService : ICompanyService
     {
         await _userService.EnsurePermissionAsync(Permissions.MasterDataRead, ct);
 
-        var items = await _companyRepository.GetPagedAsync(pagination, ct);
+        // ‏الشركة بحدّ شركتها لنفسها: القائمة شركة الفاعل وحدها (G23، G24)
+        var companyId = await _userService.GetCompanyScopeAsync(ct);
+
+        var items = await _companyRepository.GetPagedAsync(companyId, pagination, ct);
         var mapped = new List<CompanyResponseDto>(items.Count);
 
         foreach (var company in items)
@@ -68,7 +71,7 @@ public class CompanyService : ICompanyService
         return new PagedResponse<CompanyResponseDto>
         {
             Data = mapped,
-            TotalCount = await _companyRepository.CountAsync(ct),
+            TotalCount = await _companyRepository.CountAsync(companyId, ct),
             PageNumber = pagination.PageNumber,
             PageSize = pagination.PageSize
         };
@@ -80,6 +83,9 @@ public class CompanyService : ICompanyService
 
         var company = await _companyRepository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException("الشركة غير موجودة.");
+
+        // ‏`Id` هو «شركتها»: المقارنة نفسها التي تجريها الكيانات الأخرى على `CompanyId` (G25)
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), company.Id);
 
         return await MapAsync(company, ct);
     }
