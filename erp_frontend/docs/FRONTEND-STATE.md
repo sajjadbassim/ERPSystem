@@ -3515,6 +3515,12 @@ ab22b2d  §4.4: TanStack Query + Zod (28/28)
 كان يسبقها وقع 2026-09-28 — `BJE01`–`BJE04` على `ErpApi_E2E`، فالشاشة الثانية مُثبَتة
 بالخادم.)*
 
+**✅ خلفيتها جاهزة (2026-09-28):** `GET /api/reports/trial-balance` يُرجع `TrialBalanceResponseDto`
+— رأس (`basis` و`baseCurrencyId` و`baseCurrencyCode` و`branchId`) وصفوف ومجموعان، وكل مبلغ
+`{amountBase, currencyId, currencyCode}`. و`api-types/schema.d.ts` مُعاد التوليد بلا مساس بكود
+الواجهة (`tsc` نظيف، 182/182). والمجموعان من الخادم، فالشاشة **تعرض ولا تجمع** (R-API-01).
+التفصيل في `erp_backend/docs/STATE.md`.
+
 الديون: **سبعة مغلقة · ستة مفتوحة** — الجدول في «حالة الديون الثلاث عشرة» أعلاه هو
 المرجع، ولا نسخة منه هنا.
 

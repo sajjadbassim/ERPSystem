@@ -10,6 +10,7 @@ using ErpApi.Services.Accounting;
 using ErpApi.Services.Audit;
 using ErpApi.Services.Identity;
 using ErpApi.Services.MasterData;
+using ErpApi.Services.Reports;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -77,6 +78,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFiscalCalendarService, FiscalCalendarService>();
 
         services.AddScoped<IJournalEntryService, JournalEntryService>();
+
+        // تقارير القراءة (بند 10.1): استعلام مباشر في الخدمة، بلا مستودع
+        services.AddScoped<ITrialBalanceService, TrialBalanceService>();
 
         return services;
     }

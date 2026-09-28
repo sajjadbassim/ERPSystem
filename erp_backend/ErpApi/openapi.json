@@ -1513,17 +1513,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseOfIReadOnlyListOfObject"
+                  "$ref": "#/components/schemas/ApiResponseOfTrialBalanceResponseDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseOfIReadOnlyListOfObject"
+                  "$ref": "#/components/schemas/ApiResponseOfTrialBalanceResponseDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseOfIReadOnlyListOfObject"
+                  "$ref": "#/components/schemas/ApiResponseOfTrialBalanceResponseDto"
                 }
               }
             }
@@ -1976,32 +1976,6 @@
           }
         }
       },
-      "ApiResponseOfIReadOnlyListOfObject": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ]
-          },
-          "traceId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "ApiResponseOfIReadOnlyListOfstring": {
         "type": "object",
         "properties": {
@@ -2349,6 +2323,57 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ApiResponseOfTrialBalanceResponseDto": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TrialBalanceResponseDto"
+              }
+            ]
+          },
+          "traceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BaseAmountDto": {
+        "required": [
+          "amountBase",
+          "currencyId",
+          "currencyCode"
+        ],
+        "type": "object",
+        "properties": {
+          "amountBase": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": "string"
+          },
+          "currencyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currencyCode": {
+            "type": "string"
           }
         }
       },
@@ -3536,6 +3561,85 @@
           "accessTokenExpiresAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "TrialBalanceResponseDto": {
+        "required": [
+          "basis",
+          "branchId",
+          "baseCurrencyId",
+          "baseCurrencyCode",
+          "rows",
+          "totals"
+        ],
+        "type": "object",
+        "properties": {
+          "basis": {
+            "type": "string"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseCurrencyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseCurrencyCode": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrialBalanceRowDto"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/TrialBalanceTotalsDto"
+          }
+        }
+      },
+      "TrialBalanceRowDto": {
+        "required": [
+          "accountId",
+          "accountCode",
+          "accountName",
+          "debitBalance",
+          "creditBalance"
+        ],
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountCode": {
+            "type": "string"
+          },
+          "accountName": {
+            "type": "string"
+          },
+          "debitBalance": {
+            "$ref": "#/components/schemas/BaseAmountDto"
+          },
+          "creditBalance": {
+            "$ref": "#/components/schemas/BaseAmountDto"
+          }
+        }
+      },
+      "TrialBalanceTotalsDto": {
+        "required": [
+          "totalDebit",
+          "totalCredit"
+        ],
+        "type": "object",
+        "properties": {
+          "totalDebit": {
+            "$ref": "#/components/schemas/BaseAmountDto"
+          },
+          "totalCredit": {
+            "$ref": "#/components/schemas/BaseAmountDto"
           }
         }
       }

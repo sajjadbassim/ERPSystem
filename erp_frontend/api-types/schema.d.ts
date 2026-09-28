@@ -1220,9 +1220,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ApiResponseOfIReadOnlyListOfObject"];
-                        "application/json": components["schemas"]["ApiResponseOfIReadOnlyListOfObject"];
-                        "text/json": components["schemas"]["ApiResponseOfIReadOnlyListOfObject"];
+                        "text/plain": components["schemas"]["ApiResponseOfTrialBalanceResponseDto"];
+                        "application/json": components["schemas"]["ApiResponseOfTrialBalanceResponseDto"];
+                        "text/json": components["schemas"]["ApiResponseOfTrialBalanceResponseDto"];
                     };
                 };
             };
@@ -1398,12 +1398,6 @@ export interface components {
             data?: null | components["schemas"]["FxRateResponseDto"];
             traceId?: null | string;
         };
-        ApiResponseOfIReadOnlyListOfObject: {
-            success?: boolean;
-            message?: null | string;
-            data?: null | unknown[];
-            traceId?: null | string;
-        };
         ApiResponseOfIReadOnlyListOfstring: {
             success?: boolean;
             message?: null | string;
@@ -1475,6 +1469,18 @@ export interface components {
             message?: null | string;
             data?: null | components["schemas"]["TokenPairDto"];
             traceId?: null | string;
+        };
+        ApiResponseOfTrialBalanceResponseDto: {
+            success?: boolean;
+            message?: null | string;
+            data?: null | components["schemas"]["TrialBalanceResponseDto"];
+            traceId?: null | string;
+        };
+        BaseAmountDto: {
+            amountBase: string;
+            /** Format: uuid */
+            currencyId: string;
+            currencyCode: string;
         };
         BranchCreateDto: {
             /** Format: uuid */
@@ -1806,6 +1812,28 @@ export interface components {
             refreshToken: string;
             /** Format: date-time */
             accessTokenExpiresAt: string;
+        };
+        TrialBalanceResponseDto: {
+            basis: string;
+            /** Format: uuid */
+            branchId: string;
+            /** Format: uuid */
+            baseCurrencyId: string;
+            baseCurrencyCode: string;
+            rows: components["schemas"]["TrialBalanceRowDto"][];
+            totals: components["schemas"]["TrialBalanceTotalsDto"];
+        };
+        TrialBalanceRowDto: {
+            /** Format: uuid */
+            accountId: string;
+            accountCode: string;
+            accountName: string;
+            debitBalance: components["schemas"]["BaseAmountDto"];
+            creditBalance: components["schemas"]["BaseAmountDto"];
+        };
+        TrialBalanceTotalsDto: {
+            totalDebit: components["schemas"]["BaseAmountDto"];
+            totalCredit: components["schemas"]["BaseAmountDto"];
         };
     };
     responses: never;
