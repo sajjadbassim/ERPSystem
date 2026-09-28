@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthProvider";
 import { LoginScreen } from "./auth/LoginScreen";
 import { AccountsScreen } from "./screens/AccountsScreen";
 import { JournalEntryScreen } from "./screens/JournalEntryScreen";
+import { TrialBalanceScreen } from "./screens/TrialBalanceScreen";
 
 // ‏**‏`<AccountsScreen>` خلفت `<ProtectedHome>`** (2026-09-10).
 //
@@ -19,12 +20,20 @@ export function App() {
   return status === "authenticated" ? <AuthenticatedShell /> : <LoginScreen />;
 }
 
-type Destination = "accounts" | "journal-entry";
+type Destination = "accounts" | "journal-entry" | "trial-balance";
 
 const DESTINATIONS: readonly { id: Destination; label: string }[] = [
   { id: "accounts", label: "شجرة الحسابات" },
-  { id: "journal-entry", label: "قيد يومية" }
+  { id: "journal-entry", label: "قيد يومية" },
+  { id: "trial-balance", label: "ميزان المراجعة" }
 ];
+
+// ‏خريطة لا شرط ثنائي: وجهة ثالثة كانت ستجعل الشرط سلسلةً تُنسى فيها واحدة
+const SCREENS: Record<Destination, () => React.JSX.Element> = {
+  "accounts": AccountsScreen,
+  "journal-entry": JournalEntryScreen,
+  "trial-balance": TrialBalanceScreen
+};
 
 // ‏**حالة تنقّل داخلية، بلا موجّه وبلا URL** — قرار 2026-09-12 بثمنه المعلن: لا روابط
 // عميقة، لا زرّ رجوع، وإعادة التحميل تعود إلى الوجهة الافتراضية. يحرسه `NAV05`.
@@ -34,6 +43,7 @@ const DESTINATIONS: readonly { id: Destination; label: string }[] = [
 // الوجهة الغائبة حيّة (`NAV02`)
 function AuthenticatedShell() {
   const [destination, setDestination] = useState<Destination>("accounts");
+  const Screen = SCREENS[destination];
 
   return (
     <>
@@ -50,7 +60,7 @@ function AuthenticatedShell() {
         ))}
       </nav>
 
-      {destination === "accounts" ? <AccountsScreen /> : <JournalEntryScreen />}
+      <Screen />
     </>
   );
 }

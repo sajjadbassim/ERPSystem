@@ -121,6 +121,46 @@ describe("NAV — حالة التنقّل الداخلية", () => {
     expect(window.history.length).toBe(length);
   });
 
+  // ‏الوجهة الثالثة (2026-09-28). و`NAV01`–`NAV06` بلا تعديل: لا شيء فيها يفترض عدد الأزرار
+  it("NAV07: «ميزان المراجعة» ⟵ شاشة الميزان وحدها", () => {
+    setTokens(TOKENS);
+    stubApi();
+
+    renderApp();
+    fireEvent.click(navButton("ميزان المراجعة"));
+
+    expect(screen.getByRole("heading", { name: "ميزان المراجعة" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "شجرة الحسابات", hidden: true })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "قيد يومية", hidden: true })).toBeNull();
+  });
+
+  it("NAV08: من الميزان رجوعاً إلى شجرة الحسابات", () => {
+    setTokens(TOKENS);
+    stubApi();
+
+    renderApp();
+    fireEvent.click(navButton("ميزان المراجعة"));
+    fireEvent.click(navButton("شجرة الحسابات"));
+
+    expect(screen.getByRole("heading", { name: "شجرة الحسابات" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "ميزان المراجعة", hidden: true })).toBeNull();
+  });
+
+  it("NAV09: زرّ واحد من ثلاثة يحمل aria-current، وهو زرّ الميزان", () => {
+    setTokens(TOKENS);
+    stubApi();
+
+    renderApp();
+    fireEvent.click(navButton("ميزان المراجعة"));
+
+    const nav = screen.getByRole("navigation", { name: "التنقّل" });
+
+    // ‏الشرط الموجب: الأزرار ثلاثة فعلاً — فلا يمرّ «واحد يحمله» على شريط من زرّ واحد
+    expect(nav.querySelectorAll("button")).toHaveLength(3);
+    expect(Array.from(nav.querySelectorAll("button")).filter((button) => button.getAttribute("aria-current") === "page"))
+      .toEqual([navButton("ميزان المراجعة")]);
+  });
+
   it("NAV06: بلا جلسة ⟵ لا شريط تنقّل", () => {
     stubApi();
 

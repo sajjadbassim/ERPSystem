@@ -63,7 +63,7 @@ function e2eDatabaseDeclared(): string | undefined {
   return (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.ERP_E2E_DATABASE;
 }
 
-type Seeded = { api: APIRequestContext; token: string; branchId: string; iqdId: string; usdId: string };
+type Seeded = { api: APIRequestContext; token: string; companyId: string; branchId: string; iqdId: string; usdId: string };
 
 let seeded: Seeded;
 
@@ -102,7 +102,7 @@ test.beforeAll(async () => {
 
   const branchId = await findBranchId(api, token, "DEV-01");
 
-  seeded = { api, token, branchId, iqdId, usdId };
+  seeded = { api, token, companyId, branchId, iqdId, usdId };
 });
 
 test.afterAll(async () => {
@@ -269,9 +269,60 @@ test("BJE04 — الحساب التجميعي خارج منتقي سطر الق�
 
   await line(page, 0).getByLabel("الحساب", { exact: true }).click();
 
-  const options = (await page.getByRole("listbox").getByRole("option").allTextContents()).sort();
+  const options = await page.getByRole("listbox").getByRole("option").allTextContents();
 
-  // ‏المساواة لا الغياب وحده: حضور القابلين للترحيل **وغياب** `1200` وحساب العلامة
-  // التجميعي معاً — فلا تمرّ على قائمة فارغة
-  expect(options).toEqual([ACCOUNTS.cash.label, ACCOUNTS.iqdCash.label].sort());
+  // ‏حضور القابلين للترحيل **وغياب** `1200` وحساب العلامة التجميعي معاً — فلا تمرّ على
+  // قائمة فارغة.
+  // ‏⚠ **كانت مساواةً تامة حتى 2026-09-28**، وصارت احتواءً ونفياً: `BJE05` يُنشئ حسابين
+  // قابلين للترحيل برمزين جديدين كل تشغيلة، والقاعدة تتراكم — فالمساواة كانت سترسب في
+  // التشغيلة التالية على ما ليس من ادعائها
+  expect(options).toEqual(expect.arrayContaining([ACCOUNTS.cash.label, ACCOUNTS.iqdCash.label]));
+  expect(options).not.toContain(ACCOUNTS.summary.label);
+  expect(options.some((label) => label.startsWith("E2E-MARKER"))).toBe(false);
+});
+
+// ‏‏**معيار §4.5 بنصّه: «أن تُدخل قيداً بيدك وتراه يظهر في ميزان مراجعة»** (`ROADMAP.md:141`).
+//
+// ‏حسابان **جديدان برمزين فريدين كل تشغيلة**: القاعدة تتراكم قيودها بين التشغيلات، فرصيدٌ
+// مطلق على حساب مشترك لا يقيس شيئاً. والحسابان لا حركة لهما إلا هذا القيد، فرصيدهما
+// هو مبلغه بالضبط
+test("BJE05 — قيد أُدخل باليد يظهر في ميزان المراجعة بمبلغه في جانبيه، والمجموعان متساويان", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-8).toUpperCase();
+  const debit = { code: `E5D${tag}`, name: `مدين BJE05 ${tag}` };
+  const credit = { code: `E5C${tag}`, name: `دائن BJE05 ${tag}` };
+
+  await ensureAccount(seeded.api, seeded.token, seeded.companyId, { ...debit, currencyId: null });
+  await ensureAccount(seeded.api, seeded.token, seeded.companyId, { ...credit, currencyId: null });
+
+  // ‏‏**محسوب بيد الاختبار لا بالواجهة (R-API-01):** 250 × 3 = 750. والعرض بالدينار بلا خانات
+  // ‏عشرية ورمزه من السجل: `750 د.ع`
+  const amount = "750";
+  const shown = "750 د.ع";
+  const zero = "0 د.ع";
+
+  await openJournalEntry(page);
+  await fillHeader(page, `قيد ميزان BJE05 ${tag}`);
+  await fillLine(page, 0, { account: `${debit.code} — ${debit.name}`, currency: CURRENCY_LABELS.IQD, amount, side: "debit" });
+  await fillLine(page, 1, { account: `${credit.code} — ${credit.name}`, currency: CURRENCY_LABELS.IQD, amount, side: "credit" });
+  await post(page);
+  await postedDocumentNumber(page);
+
+  await page.getByRole("navigation", { name: "التنقّل" }).getByRole("button", { name: "ميزان المراجعة" }).click();
+  await choose(page, page.getByLabel("الفرع", { exact: true }), BRANCH_LABEL);
+
+  await expect(page.getByText("الأساس: عملة الدفاتر (IQD)", { exact: true })).toBeVisible();
+
+  const row = (code: string) =>
+    page.getByRole("row").filter({ has: page.getByRole("cell", { name: code, exact: true }) }).getByRole("cell");
+
+  await expect(row(debit.code)).toHaveText([debit.code, debit.name, shown, zero]);
+  await expect(row(credit.code)).toHaveText([credit.code, credit.name, zero, shown]);
+
+  // ‏المجموعان **كما عرضتهما الشاشة** متساويان نصّاً — والشاشة لا تحسبهما بل تنقلهما
+  const totals = page.getByRole("region", { name: "المجاميع" });
+  const totalDebit = (await totals.getByText("إجمالي المدين:").locator("..").textContent())?.replace("إجمالي المدين:", "").trim();
+  const totalCredit = (await totals.getByText("إجمالي الدائن:").locator("..").textContent())?.replace("إجمالي الدائن:", "").trim();
+
+  expect(totalDebit).toMatch(/^[\d,]+ د\.ع$/u);
+  expect(totalDebit).toBe(totalCredit);
 });
