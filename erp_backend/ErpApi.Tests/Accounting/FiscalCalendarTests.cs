@@ -121,6 +121,77 @@ public class FiscalCalendarTests(TestDatabase database) : IdentityTestBase(datab
             "SELECT IsClosed FROM FiscalPeriods WHERE Id = @id", ("@id", other.RegularPeriodIds[8])));
     }
 
+    // ‏‏══ G29–G30: الدين 10 — مسارا الكتابة الباقيان على التقويم ══════════════════════
+    // ‏الهدف سنة **فارغة** يُنشئها مدير شركتها: سنة البذر فيها فترات مفتوحة وتقويم مكتمل،
+    // ‏فيُرفض الإقفال (51009) والإنشاء (51011) عليها لسبب غير الشركة، فلا يثبت الأحمر شيئاً
+
+    private async Task<Guid> CreateEmptyYearAsync(string accessToken, Guid companyId, string code, int year)
+    {
+        var response = await AuthClient.PostAsync(Client, AccountingClient.FiscalYearsPath, accessToken,
+            new { companyId, code, startDate = $"{year}-01-01", endDate = $"{year}-12-31" });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await AccountingClient.ReadDataAsync(response)).GetProperty("id").GetGuid();
+    }
+
+    private static object PeriodRequest(Guid fiscalYearId, int year) => new
+    {
+        fiscalYearId,
+        periodNumber = (byte)1,
+        periodType = (byte)1,
+        name = "يناير",
+        startDate = $"{year}-01-01",
+        endDate = $"{year}-01-31"
+    };
+
+    // G29 — إقفال سنة شركة أخرى: كان يقفلها، ولا مسار لإعادة فتحها
+    [Fact]
+    public async Task G29_CloseYear_OwnSucceeds_AnotherCompanysIsForbiddenAndLeavesItOpen()
+    {
+        var identity = await NewIdentityAsync();
+        var other = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+        var (otherToken, _) = await LoginAsync(other.AdminUserName);
+
+        var ownYearId = await CreateEmptyYearAsync(accessToken, identity.Company.CompanyId, "FY2030", 2030);
+        var foreignYearId = await CreateEmptyYearAsync(otherToken, other.Company.CompanyId, "FY2030", 2030);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthClient.PostAsync(Client, AccountingClient.CloseYearPath(ownYearId), accessToken, new { })).StatusCode);
+
+        var foreign = await AuthClient.PostAsync(Client, AccountingClient.CloseYearPath(foreignYearId), accessToken, new { });
+
+        Assert.Equal(HttpStatusCode.Forbidden, foreign.StatusCode);
+        Assert.Equal(AuthMessages.CompanyOutOfScope, await MessageAsync(foreign));
+        Assert.False(await PostingClient.ScalarAsync<bool>(Database,
+            "SELECT IsClosed FROM FiscalYears WHERE Id = @id", ("@id", foreignYearId)));
+    }
+
+    // G30 — فترة في سنة شركة أخرى: كانت تُنشأ وتحجز رقمها ومداها، ولا مسار لحذفها
+    [Fact]
+    public async Task G30_CreatePeriod_InOwnYearSucceeds_InAnotherCompanysYearIsForbiddenAndWritesNothing()
+    {
+        var identity = await NewIdentityAsync();
+        var other = await NewIdentityAsync();
+        var (accessToken, _) = await LoginAsync(identity.AdminUserName);
+        var (otherToken, _) = await LoginAsync(other.AdminUserName);
+
+        var ownYearId = await CreateEmptyYearAsync(accessToken, identity.Company.CompanyId, "FY2031", 2031);
+        var foreignYearId = await CreateEmptyYearAsync(otherToken, other.Company.CompanyId, "FY2031", 2031);
+
+        Assert.Equal(HttpStatusCode.Created,
+            (await AuthClient.PostAsync(Client, AccountingClient.FiscalPeriodsPath, accessToken,
+                PeriodRequest(ownYearId, 2031))).StatusCode);
+
+        var foreign = await AuthClient.PostAsync(Client, AccountingClient.FiscalPeriodsPath, accessToken,
+            PeriodRequest(foreignYearId, 2031));
+
+        Assert.Equal(HttpStatusCode.Forbidden, foreign.StatusCode);
+        Assert.Equal(AuthMessages.CompanyOutOfScope, await MessageAsync(foreign));
+        Assert.Equal(0, await PostingClient.ScalarAsync<int>(Database,
+            "SELECT COUNT(*) FROM FiscalPeriods WHERE FiscalYearId = @year", ("@year", foreignYearId)));
+    }
+
     // L09
     [Fact]
     public async Task L09_CreateFiscalYear_ValidRange_ReturnsCreated()

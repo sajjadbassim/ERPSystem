@@ -104,6 +104,9 @@ public class FiscalCalendarService : IFiscalCalendarService
 
         var year = await LoadYearAsync(id, ct);
 
+        // إقفال سنة شركة أخرى كان يمرّ، ولا مسار لإعادة الفتح (G29)
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), year.CompanyId);
+
         // الفحص هنا يسبق TR_FiscalYear_PreventCloseWithOpenPeriods (51009) ليُنتج رسالة
         // تقول ما ينقص. التريجر يبقى الحارس الأخير على الكتابة المباشرة
         if (await _calendarRepository.HasOpenPeriodsAsync(id, ct))
@@ -135,6 +138,9 @@ public class FiscalCalendarService : IFiscalCalendarService
         await _userService.EnsurePermissionAsync(Permissions.FiscalYearManage, ct);
 
         var year = await LoadYearAsync(request.FiscalYearId, ct);
+
+        // الفترة شركتها شركة سنتها — وكانت تُنشأ في سنة أي شركة (G30)
+        CompanyScope.EnsureSame(await _userService.GetCompanyScopeAsync(ct), year.CompanyId);
 
         if (request.EndDate < request.StartDate)
         {
